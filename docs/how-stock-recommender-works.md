@@ -375,6 +375,33 @@ The Recommender tab radio buttons tell the agent which tool to use:
 | Local folder | `searchLocalFolder` only |
 | Vector DB | `searchVectorDB` only |
 
+### Verify the vector index
+
+On EC2, list indexed files and chunk counts:
+
+```bash
+cd ~/apira-rag
+sudo docker compose run --rm rag-server \
+  python scripts/purge_vector_index.py --list
+```
+
+Run semantic search directly and inspect matched filenames, chunks, and
+similarity scores:
+
+```bash
+sudo docker compose run --rm rag-server python -c "
+import json
+from rag.search import search_vector_db
+print(json.dumps(
+    search_vector_db('AAPL fiscal 2025 fourth quarter earnings', 5),
+    indent=2
+))
+"
+```
+
+The current rebuilt corpus has 244 chunks across 11 files. Exact chunk counts
+can change when extraction or chunking rules improve.
+
 ### AWS changes
 
 **No new RDS instance.** Enable pgvector on the existing database and add `DATABASE_URL` + `GOOGLE_API_KEY` to MCP `.env`. Full checklist: [setup-pgvector-rds.md](setup-pgvector-rds.md).
@@ -414,8 +441,7 @@ The Recommender tab radio buttons tell the agent which tool to use:
 
 | Doc | Content |
 |-----|---------|
-| [demo-vector-search.md](demo-vector-search.md) | Short mentor demo and verification commands |
-| [how-mcp-works.md](how-mcp-works.md) | MCP protocol and tool discovery |
+| [apira-mcp: how-mcp-works.md](https://github.com/KMeltzer24/apira-mcp/blob/main/docs/how-mcp-works.md) | MCP protocol and tool discovery |
 | [setup-pgvector-rds.md](setup-pgvector-rds.md) | AWS + RDS pgvector setup (Phase II) |
 | [stock-research/pdfs/README.md](../stock-research/pdfs/README.md) | Ticker PDF sources, ingest commands, Google PDF search |
 | [apira: architecture.md](https://github.com/KMeltzer24/apira/blob/main/docs/architecture.md) | Full system diagram |

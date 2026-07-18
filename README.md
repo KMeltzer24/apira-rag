@@ -77,5 +77,4 @@ Set `DATABASE_URL` and `GOOGLE_API_KEY` in `~/apira-rag/.env`. Port `8200` only 
 ## Documentation
 
 - [How the stock recommender works](docs/how-stock-recommender-works.md)
-- [Vector search demo](docs/demo-vector-search.md)
 - [pgvector/RDS setup](docs/setup-pgvector-rds.md)
