@@ -1,0 +1,16 @@
+Amazon.com Inc. (AMZN) — Research Summary
+
+Outlook: NEUTRAL to SLIGHT BULLISH
+
+AWS remains the cloud infrastructure leader with ~31% market share. Retail margins have improved significantly after the 2022-2023 cost-cutting cycle. Advertising is now a $50B+ run-rate business and the fastest-growing segment.
+
+Positives:
+- AWS re-accelerating with AI workload demand
+- Retail operating margin expanded to 6%+
+- Prime membership stickiness drives recurring revenue
+
+Headwinds:
+- Heavy capex spend ($75B+) for AI data centers pressures FCF
+- International retail still margin-dilutive
+
+Recommendation: HOLD for existing positions. Not a priority add unless portfolio lacks e-commerce/cloud diversification.

@@ -1,0 +1,16 @@
+services:
+  rag-server:
+    build: .
+    ports:
+      - "8200:8200"
+    environment:
+      - STOCK_RESEARCH_DIR=/data/stock-research
+      - DATABASE_URL=${DATABASE_URL}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-gemini-embedding-001}
+      - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-768}
+      - EMBED_DELAY_SECONDS=${EMBED_DELAY_SECONDS:-0.7}
+      - PYTHONPATH=/app
+    volumes:
+      - ./stock-research:/data/stock-research
+    restart: unless-stopped
