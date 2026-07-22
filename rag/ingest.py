@@ -1,6 +1,8 @@
+import logging
 from pathlib import Path
 import time
 
+from apira_logging import get_logger, log_event
 from rag.chunking import chunk_text
 from rag.config import (
     CHUNK_OVERLAP,
@@ -11,6 +13,8 @@ from rag.config import (
 )
 from rag.db import get_connection
 from rag.embeddings import embed_text
+
+logger = get_logger("apira-rag")
 
 
 def _research_root() -> Path:
@@ -84,6 +88,7 @@ def _insert_chunk(
 
 def ingest_file(path: Path) -> dict:
     """Chunk, embed, and upsert one research file into pgvector."""
+    started = time.perf_counter()
     root = _research_root()
     resolved = path.resolve()
     if not resolved.is_relative_to(root):
@@ -92,6 +97,15 @@ def ingest_file(path: Path) -> dict:
     text = resolved.read_text(encoding="utf-8", errors="replace").strip()
     text = text.replace("\x00", "")
     if not text:
+        log_event(
+            logger,
+            logging.INFO,
+            "rag.ingestion.file_skipped",
+            "Empty research file skipped",
+            filename=resolved.name,
+            chunk_count=0,
+            reason="empty_file",
+        )
         return {
             "relative_path": str(resolved.relative_to(root)),
             "chunks": 0,
@@ -117,36 +131,70 @@ def ingest_file(path: Path) -> dict:
             if EMBED_DELAY_SECONDS > 0 and index + 1 < len(chunks):
                 time.sleep(EMBED_DELAY_SECONDS)
 
-    return {
+    result = {
         "relative_path": relative_path,
         "chunks": len(chunks),
         "skipped": False,
     }
+    log_event(
+        logger,
+        logging.INFO,
+        "rag.ingestion.file_completed",
+        "Research file ingestion completed",
+        filename=resolved.name,
+        chunk_count=len(chunks),
+        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+    return result
 
 
 def ingest_all() -> dict:
     """Ingest every .txt / .md file under stock-research/."""
+    started = time.perf_counter()
     root = _research_root()
     files = _iter_ingest_files(root)
     results = []
     total_chunks = 0
 
+    log_event(
+        logger,
+        logging.INFO,
+        "rag.ingestion.started",
+        "Research corpus ingestion started",
+        file_count=len(files),
+    )
     for path in files:
-        print(f"Ingesting {path.relative_to(root)} ...", flush=True)
+        log_event(
+            logger,
+            logging.INFO,
+            "rag.ingestion.file_started",
+            "Research file ingestion started",
+            filename=path.name,
+        )
         result = ingest_file(path)
         results.append(result)
         total_chunks += result.get("chunks", 0)
-        print(f"  -> {result.get('chunks', 0)} chunks", flush=True)
 
     valid_paths = {result["relative_path"] for result in results}
     orphans_removed = 0
     with get_connection() as conn:
         orphans_removed = _delete_orphan_chunks(conn, valid_paths)
 
-    return {
+    result = {
         "folder": str(root),
         "files_processed": len(results),
         "total_chunks": total_chunks,
         "orphans_removed": orphans_removed,
         "files": results,
     }
+    log_event(
+        logger,
+        logging.INFO,
+        "rag.ingestion.completed",
+        "Research corpus ingestion completed",
+        files_processed=len(results),
+        chunk_count=total_chunks,
+        orphans_removed=orphans_removed,
+        duration_ms=round((time.perf_counter() - started) * 1000, 2),
+    )
+    return result

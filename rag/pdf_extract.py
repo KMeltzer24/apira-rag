@@ -3,11 +3,17 @@
 from __future__ import annotations
 
 from collections import Counter
+import logging
 import math
 import re
 from pathlib import Path
+from time import perf_counter
 
 from pypdf import PdfReader
+
+from apira_logging import get_logger, log_event
+
+logger = get_logger("apira-rag")
 
 # Patterns common on covers, legal pages, and navigation pages.
 FLUFF_PATTERNS = (
@@ -227,6 +233,7 @@ def is_fluff_page(text: str) -> bool:
 
 def extract_pdf_text(pdf_path: Path, *, skip_fluff: bool = True) -> dict:
     """Extract useful text and report exactly what was removed."""
+    started = perf_counter()
     reader = PdfReader(str(pdf_path))
     raw_pages = [_normalize_text(page.extract_text() or "") for page in reader.pages]
     repeated_keys = _repeated_edge_keys(raw_pages) if skip_fluff else set()
@@ -256,7 +263,7 @@ def extract_pdf_text(pdf_path: Path, *, skip_fluff: bool = True) -> dict:
         kept_parts.append(f"[Page {index}]\n{text}")
         kept_pages.append(index)
 
-    return {
+    result = {
         "text": "\n\n".join(kept_parts),
         "total_pages": len(reader.pages),
         "pages_kept": kept_pages,
@@ -264,3 +271,17 @@ def extract_pdf_text(pdf_path: Path, *, skip_fluff: bool = True) -> dict:
         "pages_skipped_details": skipped_page_details,
         "removed_boilerplate_lines": removed_boilerplate_lines,
     }
+    log_event(
+        logger,
+        logging.INFO,
+        "rag.pdf_extraction.completed",
+        "PDF extraction completed",
+        filename=pdf_path.name,
+        page_count=result["total_pages"],
+        pages_kept=len(kept_pages),
+        pages_skipped=len(skipped_pages),
+        removed_boilerplate_lines=removed_boilerplate_lines,
+        extracted_characters=len(result["text"]),
+        duration_ms=round((perf_counter() - started) * 1000, 2),
+    )
+    return result

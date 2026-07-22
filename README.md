@@ -58,7 +58,8 @@ From the repository root on your Mac:
 
 ```bash
 tar czf /tmp/apira-rag-deploy.tgz \
-  server.py requirements.txt Dockerfile .dockerignore docker-compose.yml \
+  server.py apira_logging.py request_logging.py requirements.txt \
+  Dockerfile .dockerignore docker-compose.yml \
   .env.example rag scripts stock-research docs tests
 
 scp -i ../apira/my-ec2-key.pem /tmp/apira-rag-deploy.tgz \
@@ -73,6 +74,24 @@ ssh -i ../apira/my-ec2-key.pem ec2-user@<EC2_PUBLIC_IP> \
 ```
 
 Set `DATABASE_URL` and `GOOGLE_API_KEY` in `~/apira-rag/.env`. Port `8200` only needs to be reachable from the co-located agent; it does not need a public security-group rule.
+
+## Logging and correlation
+
+The RAG service emits structured JSON logs to stdout for MCP tool calls, local
+and vector searches, database operations, embedding retries, PDF extraction,
+and ingestion. It accepts or generates `X-Request-ID` and returns it to the
+caller. Logs include counts, filenames, model names, statuses, and durations;
+they omit query text, document contents, vectors, credentials, and tool argument
+values.
+
+```bash
+sudo docker compose logs -f rag-server
+sudo docker compose logs --since=10m rag-server | grep '<request-id>'
+```
+
+See the shared [logging contract](https://github.com/KMeltzer24/apira/blob/main/docs/logging.md),
+[how logging works](https://github.com/KMeltzer24/apira/blob/main/docs/how-logging-works.md),
+and the [mentor demo](https://github.com/KMeltzer24/apira/blob/main/docs/demo-logging.md).
 
 ## Documentation
 

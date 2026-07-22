@@ -1,8 +1,12 @@
+from pathlib import Path
+import types
 import unittest
+from unittest.mock import patch
 
 from rag.pdf_extract import (
     _clean_page,
     _repeated_edge_keys,
+    extract_pdf_text,
     fluff_reason,
     is_fluff_page,
 )
@@ -36,6 +40,30 @@ class PdfExtractTests(unittest.TestCase):
         self.assertNotIn("Page 1", cleaned)
         self.assertIn("Revenue grew", cleaned)
         self.assertEqual(removed, 2)
+
+    def test_extraction_logs_only_summary_metadata(self):
+        page = types.SimpleNamespace(
+            extract_text=lambda: (
+                "Net sales $102,466 $94,930\n"
+                "Net income $27,466 $14,736\n"
+                "Earnings per share $1.85 $0.97"
+            )
+        )
+        events = []
+
+        def capture(_logger, _level, event, _message, **fields):
+            events.append((event, fields))
+
+        with (
+            patch("rag.pdf_extract.PdfReader", return_value=types.SimpleNamespace(pages=[page])),
+            patch("rag.pdf_extract.log_event", side_effect=capture),
+        ):
+            result = extract_pdf_text(Path("quarterly-report.pdf"))
+
+        self.assertEqual(result["total_pages"], 1)
+        self.assertEqual(events[0][0], "rag.pdf_extraction.completed")
+        self.assertEqual(events[0][1]["filename"], "quarterly-report.pdf")
+        self.assertNotIn("Net sales", repr(events))
 
 
 if __name__ == "__main__":

@@ -10,6 +10,9 @@ services:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-gemini-embedding-001}
       - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-768}
       - EMBED_DELAY_SECONDS=${EMBED_DELAY_SECONDS:-0.7}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - LOG_FORMAT=${LOG_FORMAT:-json}
+      - ENVIRONMENT=${ENVIRONMENT:-development}
       - PYTHONPATH=/app
     volumes:
       - ./stock-research:/data/stock-research
