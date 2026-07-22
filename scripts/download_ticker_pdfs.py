@@ -8,7 +8,7 @@ from pathlib import Path
 
 from rag.config import STOCK_RESEARCH_DIR
 
-UA = "ApiraDemoBot/1.0 (mentorship learning project)"
+UA = "ApiraDemoBot/1.0 (learning project)"
 DEST = Path(STOCK_RESEARCH_DIR).resolve() / "pdfs"
 
 PDFS = (

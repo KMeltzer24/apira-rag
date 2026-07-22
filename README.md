@@ -91,7 +91,7 @@ sudo docker compose logs --since=10m rag-server | grep '<request-id>'
 
 See the shared [logging contract](https://github.com/KMeltzer24/apira/blob/main/docs/logging.md),
 [how logging works](https://github.com/KMeltzer24/apira/blob/main/docs/how-logging-works.md),
-and the [mentor demo](https://github.com/KMeltzer24/apira/blob/main/docs/demo-logging.md).
+and the [logging demo](https://github.com/KMeltzer24/apira/blob/main/docs/demo-logging.md).
 
 ## Documentation
 

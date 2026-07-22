@@ -226,7 +226,7 @@ Re-running `ingest_research.py` updates changed files and **removes embeddings f
 
 ### Finding new research (Google → PDF)
 
-As your mentor described:
+To find new research PDFs:
 
 1. Search ticker-specific queries, e.g. `MSFT earnings Q3 2026 filetype:pdf`
 2. Google **Tools → Advanced search → File type: PDF**
