@@ -53,7 +53,18 @@ class RagEventTests(unittest.TestCase):
         self.assertTrue(all(fields["error_code"] == 429 for fields in retry_fields))
 
     def test_database_search_logs_match_count_without_query(self):
-        rows = [("report.md", "report.md", 0, "result text", 0.91)]
+        rows = [
+            (
+                "report.md",
+                "report.md",
+                0,
+                "result text",
+                0.91,
+                "AAPL",
+                None,
+                "Revenue",
+            )
+        ]
 
         class Cursor:
             def __enter__(self):
@@ -92,6 +103,7 @@ class RagEventTests(unittest.TestCase):
 
             with (
                 patch.object(search, "embed_text", return_value=[0.1, 0.2]),
+                patch.object(search, "ensure_research_chunk_schema"),
                 patch.object(search, "log_event", side_effect=capture),
             ):
                 result = search.search_vector_db("private search query", 3)
@@ -103,6 +115,7 @@ class RagEventTests(unittest.TestCase):
                 sys.modules["rag.db"] = previous_db
 
         self.assertEqual(result["match_count"], 1)
+        self.assertEqual(result["matches"][0]["ticker"], "AAPL")
         self.assertIn(
             ("rag.db_search.completed", 1),
             [(event, fields.get("match_count")) for event, fields in events],

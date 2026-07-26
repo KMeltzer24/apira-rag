@@ -1,3 +1,4 @@
+import hashlib
 import logging
 from pathlib import Path
 import time
@@ -13,6 +14,8 @@ from rag.config import (
 )
 from rag.db import get_connection
 from rag.embeddings import embed_text
+from rag.metadata import extract_document_date, extract_section_title, extract_ticker
+from rag.schema import ensure_research_chunk_schema
 
 logger = get_logger("apira-rag")
 
@@ -41,6 +44,10 @@ def _iter_ingest_files(root: Path) -> list[Path]:
     return files
 
 
+def _content_hash(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
 def _delete_chunks(conn, relative_path: str) -> None:
     with conn.cursor() as cur:
         cur.execute(
@@ -60,6 +67,21 @@ def _delete_orphan_chunks(conn, valid_paths: set[str]) -> int:
     return len(orphans)
 
 
+def _stored_content_hash(conn, relative_path: str) -> str | None:
+    with conn.cursor() as cur:
+        cur.execute(
+            """
+            SELECT content_hash
+            FROM research_chunks
+            WHERE relative_path = %s
+            LIMIT 1
+            """,
+            (relative_path,),
+        )
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
 def _insert_chunk(
     conn,
     *,
@@ -68,27 +90,59 @@ def _insert_chunk(
     chunk_index: int,
     content: str,
     embedding: list[float],
+    content_hash: str,
+    ticker: str | None,
+    document_date,
+    section_title: str | None,
 ) -> None:
     with conn.cursor() as cur:
         cur.execute(
             """
             INSERT INTO research_chunks
-                (filename, relative_path, chunk_index, content, embedding)
-            VALUES (%s, %s, %s, %s, %s)
+                (
+                    filename,
+                    relative_path,
+                    chunk_index,
+                    content,
+                    embedding,
+                    content_hash,
+                    ticker,
+                    document_date,
+                    section_title
+                )
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (relative_path, chunk_index)
             DO UPDATE SET
                 filename = EXCLUDED.filename,
                 content = EXCLUDED.content,
                 embedding = EXCLUDED.embedding,
+                content_hash = EXCLUDED.content_hash,
+                ticker = EXCLUDED.ticker,
+                document_date = EXCLUDED.document_date,
+                section_title = EXCLUDED.section_title,
                 created_at = NOW()
             """,
-            (filename, relative_path, chunk_index, content, embedding),
+            (
+                filename,
+                relative_path,
+                chunk_index,
+                content,
+                embedding,
+                content_hash,
+                ticker,
+                document_date,
+                section_title,
+            ),
         )
 
 
-def ingest_file(path: Path) -> dict:
-    """Chunk, embed, and upsert one research file into pgvector."""
+def ingest_file(path: Path, *, force: bool = True) -> dict:
+    """Chunk, embed, and upsert one research file into pgvector.
+
+    When *force* is False, unchanged files (same content hash) are skipped.
+    """
     started = time.perf_counter()
+    ensure_research_chunk_schema()
     root = _research_root()
     resolved = path.resolve()
     if not resolved.is_relative_to(root):
@@ -96,6 +150,7 @@ def ingest_file(path: Path) -> dict:
 
     text = resolved.read_text(encoding="utf-8", errors="replace").strip()
     text = text.replace("\x00", "")
+    relative_path = str(resolved.relative_to(root))
     if not text:
         log_event(
             logger,
@@ -107,16 +162,40 @@ def ingest_file(path: Path) -> dict:
             reason="empty_file",
         )
         return {
-            "relative_path": str(resolved.relative_to(root)),
+            "relative_path": relative_path,
             "chunks": 0,
             "skipped": True,
             "reason": "empty file",
         }
 
-    relative_path = str(resolved.relative_to(root))
-    chunks = chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
+    digest = _content_hash(text)
+    ticker = extract_ticker(resolved, text)
+    document_date = extract_document_date(resolved, text)
 
     with get_connection() as conn:
+        if not force:
+            existing = _stored_content_hash(conn, relative_path)
+            if existing == digest:
+                log_event(
+                    logger,
+                    logging.INFO,
+                    "rag.ingestion.file_skipped",
+                    "Unchanged research file skipped",
+                    filename=resolved.name,
+                    chunk_count=0,
+                    reason="unchanged_hash",
+                    ticker=ticker,
+                )
+                return {
+                    "relative_path": relative_path,
+                    "chunks": 0,
+                    "skipped": True,
+                    "reason": "unchanged",
+                    "ticker": ticker,
+                    "document_date": document_date.isoformat() if document_date else None,
+                }
+
+        chunks = chunk_text(text, CHUNK_SIZE, CHUNK_OVERLAP)
         _delete_chunks(conn, relative_path)
         for index, chunk in enumerate(chunks):
             vector = embed_text(chunk)
@@ -127,6 +206,10 @@ def ingest_file(path: Path) -> dict:
                 chunk_index=index,
                 content=chunk,
                 embedding=vector,
+                content_hash=digest,
+                ticker=ticker,
+                document_date=document_date,
+                section_title=extract_section_title(chunk),
             )
             if EMBED_DELAY_SECONDS > 0 and index + 1 < len(chunks):
                 time.sleep(EMBED_DELAY_SECONDS)
@@ -135,6 +218,8 @@ def ingest_file(path: Path) -> dict:
         "relative_path": relative_path,
         "chunks": len(chunks),
         "skipped": False,
+        "ticker": ticker,
+        "document_date": document_date.isoformat() if document_date else None,
     }
     log_event(
         logger,
@@ -143,25 +228,28 @@ def ingest_file(path: Path) -> dict:
         "Research file ingestion completed",
         filename=resolved.name,
         chunk_count=len(chunks),
+        ticker=ticker,
+        document_date=result["document_date"],
         duration_ms=round((time.perf_counter() - started) * 1000, 2),
     )
     return result
 
 
-def ingest_all() -> dict:
-    """Ingest every .txt / .md file under stock-research/."""
+def _ingest_many(files: list[Path], *, force: bool, event_prefix: str) -> dict:
     started = time.perf_counter()
+    ensure_research_chunk_schema()
     root = _research_root()
-    files = _iter_ingest_files(root)
     results = []
     total_chunks = 0
+    skipped = 0
 
     log_event(
         logger,
         logging.INFO,
-        "rag.ingestion.started",
+        f"{event_prefix}.started",
         "Research corpus ingestion started",
         file_count=len(files),
+        force=force,
     )
     for path in files:
         log_event(
@@ -171,11 +259,13 @@ def ingest_all() -> dict:
             "Research file ingestion started",
             filename=path.name,
         )
-        result = ingest_file(path)
+        result = ingest_file(path, force=force)
         results.append(result)
         total_chunks += result.get("chunks", 0)
+        if result.get("skipped"):
+            skipped += 1
 
-    valid_paths = {result["relative_path"] for result in results}
+    valid_paths = {str(path.relative_to(root)) for path in files}
     orphans_removed = 0
     with get_connection() as conn:
         orphans_removed = _delete_orphan_chunks(conn, valid_paths)
@@ -183,6 +273,8 @@ def ingest_all() -> dict:
     result = {
         "folder": str(root),
         "files_processed": len(results),
+        "files_ingested": len(results) - skipped,
+        "files_skipped": skipped,
         "total_chunks": total_chunks,
         "orphans_removed": orphans_removed,
         "files": results,
@@ -190,11 +282,29 @@ def ingest_all() -> dict:
     log_event(
         logger,
         logging.INFO,
-        "rag.ingestion.completed",
+        f"{event_prefix}.completed",
         "Research corpus ingestion completed",
         files_processed=len(results),
+        files_ingested=result["files_ingested"],
+        files_skipped=skipped,
         chunk_count=total_chunks,
         orphans_removed=orphans_removed,
         duration_ms=round((time.perf_counter() - started) * 1000, 2),
     )
     return result
+
+
+def ingest_all() -> dict:
+    """Ingest every .txt / .md file under stock-research/ (full rebuild)."""
+    root = _research_root()
+    return _ingest_many(_iter_ingest_files(root), force=True, event_prefix="rag.ingestion")
+
+
+def ingest_changed() -> dict:
+    """Ingest only new or changed research files (skip unchanged content hashes)."""
+    root = _research_root()
+    return _ingest_many(
+        _iter_ingest_files(root),
+        force=False,
+        event_prefix="rag.ingestion_changed",
+    )

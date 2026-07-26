@@ -40,10 +40,16 @@ Run tests:
 PYTHONPATH=. python -m unittest discover -s tests -v
 ```
 
-Ingest the committed corpus:
+Ingest the committed corpus (full rebuild — re-embeds every file):
 
 ```bash
 docker compose run --rm rag-server python scripts/ingest_research.py
+```
+
+Ingest only **new or changed** files (recommended when adding a PDF):
+
+```bash
+docker compose run --rm rag-server python scripts/ingest_changed.py
 ```
 
 Re-extract PDFs and refresh the vector index:
@@ -60,7 +66,7 @@ From the repository root on your Mac:
 tar czf /tmp/apira-rag-deploy.tgz \
   server.py apira_logging.py request_logging.py requirements.txt \
   Dockerfile .dockerignore docker-compose.yml \
-  .env.example rag scripts stock-research docs tests
+  .env.example rag scripts sql stock-research docs tests
 
 scp -i ../apira/my-ec2-key.pem /tmp/apira-rag-deploy.tgz \
   ec2-user@<EC2_PUBLIC_IP>:/tmp/

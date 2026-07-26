@@ -205,11 +205,25 @@ To replace PDFs/SEC extracts (rare): `bash scripts/refresh_ticker_corpus.sh`, th
 
 ### What “chunks” means
 
-The vector DB does not store whole files. Each `.txt` / `.md` is split into pieces of about **800 characters** (with overlap). The chunker prefers paragraph, sentence, and word boundaries instead of cutting text at an arbitrary character. Each piece gets a Gemini embedding and one row in `research_chunks`.
+The vector DB does not store whole files. Each `.txt` / `.md` is split into pieces of about **800 characters** (with overlap). The chunker first splits on markdown / Source headings, then prefers paragraph, sentence, and word boundaries. Each piece gets a Gemini embedding and one row in `research_chunks`, plus metadata:
+
+- `ticker` — from filename or research-note header
+- `document_date` — from FY/Q patterns in the filename when present
+- `section_title` — heading at the start of the chunk when present
+- `content_hash` — used so `ingest_changed` can skip unchanged files
 
 Example: 6 analyst notes + 5 earnings extracts might produce ~80–120 chunks total. That number is **pieces of text**, not file count.
 
-Re-running `ingest_research.py` updates changed files and **removes embeddings for deleted files** (orphan cleanup).
+**Ingest modes:**
+
+| Command | Behavior |
+|---------|----------|
+| `scripts/ingest_changed.py` | New/changed files only (best when adding a PDF) |
+| `scripts/ingest_research.py` | Full rebuild of every file |
+
+`searchVectorDB` ranks by similarity, then **prefers newer `document_date` values for the same ticker** so older earnings chunks lose to newer ones when both match.
+
+Optional SQL (also applied automatically by the app): `sql/migrate_research_chunks_metadata.sql`.
 
 ### PDF fluff-page skipping
 

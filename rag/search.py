@@ -5,8 +5,13 @@ from apira_logging import get_logger, log_event
 from rag.config import DEFAULT_SEARCH_LIMIT
 from rag.db import get_connection
 from rag.embeddings import embed_text
+from rag.ranking import prefer_newer
+from rag.schema import ensure_research_chunk_schema
 
 logger = get_logger("apira-rag")
+
+# Pull extra candidates so we can drop older docs for the same ticker.
+_CANDIDATE_MULTIPLIER = 4
 
 
 def search_vector_db(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
@@ -15,6 +20,8 @@ def search_vector_db(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
         raise ValueError("query must not be empty")
 
     started = perf_counter()
+    ensure_research_chunk_schema()
+    candidate_limit = max(limit * _CANDIDATE_MULTIPLIER, limit)
     log_event(
         logger,
         logging.INFO,
@@ -33,12 +40,15 @@ def search_vector_db(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
                         relative_path,
                         chunk_index,
                         content,
-                        1 - (embedding <=> %s::vector) AS similarity
+                        1 - (embedding <=> %s::vector) AS similarity,
+                        ticker,
+                        document_date,
+                        section_title
                     FROM research_chunks
                     ORDER BY embedding <=> %s::vector
                     LIMIT %s
                     """,
-                    (vector, vector, limit),
+                    (vector, vector, candidate_limit),
                 )
                 rows = cur.fetchall()
     except Exception as exc:
@@ -53,13 +63,15 @@ def search_vector_db(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
         )
         raise
 
+    preferred = prefer_newer(rows, limit)
     log_event(
         logger,
         logging.INFO,
         "rag.db_search.completed",
         "Database vector search completed",
         limit=limit,
-        match_count=len(rows),
+        match_count=len(preferred),
+        candidate_count=len(rows),
         duration_ms=round((perf_counter() - started) * 1000, 2),
     )
 
@@ -70,8 +82,11 @@ def search_vector_db(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
             "chunk_index": row[2],
             "content": row[3],
             "similarity": round(float(row[4]), 4),
+            "ticker": row[5],
+            "document_date": row[6].isoformat() if row[6] else None,
+            "section_title": row[7],
         }
-        for row in rows
+        for row in preferred
     ]
 
     return {

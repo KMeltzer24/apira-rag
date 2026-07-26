@@ -56,6 +56,10 @@ That creates:
 - `vector` extension
 - `research_chunks` table with an `embedding vector(768)` column (Gemini `gemini-embedding-001`)
 
+Optional metadata columns (ticker, document date, content hash) are in
+`sql/migrate_research_chunks_metadata.sql` and are also applied automatically by
+`rag/schema.py` on ingest/search.
+
 **Note:** This has already been run on the project RDS instance. Keep the SQL here for reference only.
 
 ---
