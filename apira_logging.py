@@ -127,4 +127,12 @@ def log_event(
     message: str,
     **fields: Any,
 ) -> None:
-    logger.log(level, message, extra={"event": event, **fields})
+    # logging.LogRecord already owns keys like filename/module/name — remap
+    # application fields so structured extras never collide.
+    remapped: dict[str, Any] = {}
+    for key, value in fields.items():
+        safe_key = key
+        if key in _STANDARD_RECORD_KEYS or key in {"message", "msg", "args"}:
+            safe_key = f"field_{key}"
+        remapped[safe_key] = value
+    logger.log(level, message, extra={"event": event, **remapped})
