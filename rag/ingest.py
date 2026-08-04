@@ -156,7 +156,7 @@ def ingest_file(path: Path, *, force: bool = True) -> dict:
             logger,
             logging.INFO,
             "rag.ingestion.file_skipped",
-            "Empty research file skipped",
+            f"Empty research file skipped: {resolved.name}",
             filename=resolved.name,
             chunk_count=0,
             reason="empty_file",
@@ -180,7 +180,7 @@ def ingest_file(path: Path, *, force: bool = True) -> dict:
                     logger,
                     logging.INFO,
                     "rag.ingestion.file_skipped",
-                    "Unchanged research file skipped",
+                    f"Unchanged research file skipped: {resolved.name}",
                     filename=resolved.name,
                     chunk_count=0,
                     reason="unchanged_hash",
@@ -225,7 +225,7 @@ def ingest_file(path: Path, *, force: bool = True) -> dict:
         logger,
         logging.INFO,
         "rag.ingestion.file_completed",
-        "Research file ingestion completed",
+        f"Ingested {resolved.name} ({len(chunks)} chunks)",
         filename=resolved.name,
         chunk_count=len(chunks),
         ticker=ticker,
@@ -243,20 +243,23 @@ def _ingest_many(files: list[Path], *, force: bool, event_prefix: str) -> dict:
     total_chunks = 0
     skipped = 0
 
+    ingest_kind = (
+        "Full" if event_prefix == "rag.ingestion" else "Changed-only"
+    )
     log_event(
         logger,
         logging.INFO,
         f"{event_prefix}.started",
-        "Research corpus ingestion started",
+        f"{ingest_kind} research corpus ingestion started ({len(files)} files)",
         file_count=len(files),
         force=force,
     )
     for path in files:
         log_event(
             logger,
-            logging.INFO,
+            logging.DEBUG,
             "rag.ingestion.file_started",
-            "Research file ingestion started",
+            f"Research file ingestion started: {path.name}",
             filename=path.name,
         )
         result = ingest_file(path, force=force)
@@ -283,7 +286,11 @@ def _ingest_many(files: list[Path], *, force: bool, event_prefix: str) -> dict:
         logger,
         logging.INFO,
         f"{event_prefix}.completed",
-        "Research corpus ingestion completed",
+        (
+            f"{ingest_kind} research corpus ingestion completed "
+            f"({result['files_ingested']} ingested, {skipped} skipped, "
+            f"{total_chunks} chunks)"
+        ),
         files_processed=len(results),
         files_ingested=result["files_ingested"],
         files_skipped=skipped,

@@ -105,6 +105,22 @@ class TextFormatter(logging.Formatter):
         return f"{record.levelname} {event} request_id={request_id} {record.getMessage()}"
 
 
+_NOISY_THIRD_PARTY = (
+    "httpx",
+    "httpcore",
+    "google_genai",
+    "google.genai",
+    "urllib3",
+    "mcp",
+    "mcp.client.streamable_http",
+)
+
+
+def _quiet_third_party_loggers() -> None:
+    for name in _NOISY_THIRD_PARTY:
+        logging.getLogger(name).setLevel(logging.WARNING)
+
+
 def get_logger(service: str) -> logging.Logger:
     logger = logging.getLogger(service)
     logger.handlers.clear()
@@ -117,6 +133,7 @@ def get_logger(service: str) -> logging.Logger:
     logger.addHandler(handler)
     logger.setLevel(os.getenv("LOG_LEVEL", "INFO").upper())
     logger.propagate = False
+    _quiet_third_party_loggers()
     return logger
 
 

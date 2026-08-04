@@ -88,11 +88,12 @@ class RequestLoggingMiddleware(Middleware):
             "arg_keys": sorted(str(key) for key in arguments),
         }
         started = perf_counter()
+        # Agent already logs tool lifecycle at INFO; keep middleware at DEBUG.
         log_event(
             logger,
-            logging.INFO,
+            logging.DEBUG,
             "mcp.tool.started",
-            "Tool call started",
+            f"MCP tool {tool_name} started",
             **fields,
         )
         try:
@@ -102,7 +103,7 @@ class RequestLoggingMiddleware(Middleware):
                 logger,
                 logging.ERROR,
                 "mcp.tool.failed",
-                "Tool call failed",
+                f"MCP tool {tool_name} failed ({type(exc).__name__})",
                 **fields,
                 duration_ms=round((perf_counter() - started) * 1000, 2),
                 error_type=type(exc).__name__,
@@ -111,9 +112,9 @@ class RequestLoggingMiddleware(Middleware):
         else:
             log_event(
                 logger,
-                logging.INFO,
+                logging.DEBUG,
                 "mcp.tool.completed",
-                "Tool call completed",
+                f"MCP tool {tool_name} completed",
                 **fields,
                 duration_ms=round((perf_counter() - started) * 1000, 2),
             )

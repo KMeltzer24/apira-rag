@@ -89,7 +89,7 @@ async def searchLocalFolder(query: str = "") -> dict:
         logger,
         logging.INFO,
         "rag.local_search.completed",
-        "Local research search completed",
+        f"Local folder search completed ({len(matches)} files)",
         match_count=len(matches),
         result_bytes=total_bytes,
     )
@@ -99,16 +99,8 @@ async def searchLocalFolder(query: str = "") -> dict:
 @mcp.tool()
 async def searchVectorDB(query: str, limit: int = 5) -> dict:
     """Semantically search ingested stock research in PostgreSQL/pgvector."""
-    result = await asyncio.to_thread(search_vector_db, query, limit)
-    log_event(
-        logger,
-        logging.INFO,
-        "rag.vector_search.completed",
-        "Vector search completed",
-        match_count=result["match_count"],
-        limit=limit,
-    )
-    return result
+    # Lifecycle detail lives in rag.db_search.*; avoid a duplicate INFO line here.
+    return await asyncio.to_thread(search_vector_db, query, limit)
 
 
 if __name__ == "__main__":

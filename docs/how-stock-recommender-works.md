@@ -221,7 +221,7 @@ Example: 6 analyst notes + 5 earnings extracts might produce ~80–120 chunks to
 | `scripts/ingest_changed.py` | New/changed files only (best when adding a PDF) |
 | `scripts/ingest_research.py` | Full rebuild of every file |
 
-`searchVectorDB` ranks by similarity, then **prefers newer `document_date` values for the same ticker** so older earnings chunks lose to newer ones when both match.
+`searchVectorDB` ranks by similarity, then **prefers newer `document_date` values for the same ticker** so older earnings chunks lose to newer ones when both match. Parameter reference (similarity formula, `limit`, candidate pool): [vector-search-params.md](vector-search-params.md).
 
 Optional SQL (also applied automatically by the app): `sql/migrate_research_chunks_metadata.sql`.
 
@@ -457,6 +457,7 @@ can change when extraction or chunking rules improve.
 |-----|---------|
 | [apira-mcp: how-mcp-works.md](https://github.com/KMeltzer24/apira-mcp/blob/main/docs/how-mcp-works.md) | MCP protocol and tool discovery |
 | [setup-pgvector-rds.md](setup-pgvector-rds.md) | AWS + RDS pgvector setup (Phase II) |
+| [vector-search-params.md](vector-search-params.md) | `similarity`, `limit`, prefer-newer ranking |
 | [stock-research/pdfs/README.md](../stock-research/pdfs/README.md) | Ticker PDF sources, ingest commands, Google PDF search |
 | [apira: architecture.md](https://github.com/KMeltzer24/apira/blob/main/docs/architecture.md) | Full system diagram |
 | [apira-agent: how-the-agent-works.md](https://github.com/KMeltzer24/apira-agent/blob/main/docs/how-the-agent-works.md) | LangGraph + Gemini setup |

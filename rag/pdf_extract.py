@@ -275,7 +275,10 @@ def extract_pdf_text(pdf_path: Path, *, skip_fluff: bool = True) -> dict:
         logger,
         logging.INFO,
         "rag.pdf_extraction.completed",
-        "PDF extraction completed",
+        (
+            f"PDF extraction completed: {pdf_path.name} "
+            f"(kept {len(kept_pages)}/{result['total_pages']} pages)"
+        ),
         filename=pdf_path.name,
         page_count=result["total_pages"],
         pages_kept=len(kept_pages),

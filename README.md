@@ -48,7 +48,8 @@ values for the same ticker** so older overlapping chunks lose to newer ones.
 - Full rebuild (re-embed everything): `scripts/ingest_research.py`
 - New/changed files only: `scripts/ingest_changed.py`
 
-Details: [docs/how-stock-recommender-works.md](docs/how-stock-recommender-works.md).
+Details: [docs/how-stock-recommender-works.md](docs/how-stock-recommender-works.md).  
+Vector params (`similarity`, `limit`, prefer-newer): [docs/vector-search-params.md](docs/vector-search-params.md).
 
 ## Local setup
 

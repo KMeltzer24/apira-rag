@@ -24,9 +24,9 @@ def search_vector_db(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
     candidate_limit = max(limit * _CANDIDATE_MULTIPLIER, limit)
     log_event(
         logger,
-        logging.INFO,
+        logging.DEBUG,
         "rag.db_search.started",
-        "Database vector search started",
+        f"pgvector search started (limit={limit})",
         limit=limit,
     )
     try:
@@ -68,7 +68,10 @@ def search_vector_db(query: str, limit: int = DEFAULT_SEARCH_LIMIT) -> dict:
         logger,
         logging.INFO,
         "rag.db_search.completed",
-        "Database vector search completed",
+        (
+            f"pgvector search completed "
+            f"({len(preferred)} matches from {len(rows)} candidates)"
+        ),
         limit=limit,
         match_count=len(preferred),
         candidate_count=len(rows),

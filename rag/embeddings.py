@@ -35,9 +35,9 @@ def embed_text(text: str, *, task_type: str = "RETRIEVAL_DOCUMENT") -> list[floa
         started = time.perf_counter()
         log_event(
             logger,
-            logging.INFO,
+            logging.DEBUG,
             "rag.embedding.started",
-            "Embedding request started",
+            f"Embedding started ({task_type}, attempt {attempt + 1})",
             model=_model_name(),
             task_type=task_type,
             attempt=attempt + 1,
@@ -57,9 +57,9 @@ def embed_text(text: str, *, task_type: str = "RETRIEVAL_DOCUMENT") -> list[floa
                 raise RuntimeError("Embedding API returned no values.")
             log_event(
                 logger,
-                logging.INFO,
+                logging.DEBUG,
                 "rag.embedding.completed",
-                "Embedding request completed",
+                f"Embedding completed ({len(values)} dims)",
                 model=_model_name(),
                 task_type=task_type,
                 attempt=attempt + 1,

@@ -67,9 +67,11 @@ class ServerEventTests(unittest.TestCase):
             ("rag.local_search.completed", 1),
             [(event, fields.get("match_count")) for event, fields in events],
         )
-        self.assertIn(
-            ("rag.vector_search.completed", 2),
-            [(event, fields.get("match_count")) for event, fields in events],
+        # Vector search lifecycle is logged inside rag.search (db_search.*),
+        # not duplicated at the MCP tool wrapper.
+        self.assertNotIn(
+            "rag.vector_search.completed",
+            [event for event, _fields in events],
         )
         self.assertNotIn("revenue", repr(events).lower())
         self.assertNotIn("private", repr(events).lower())

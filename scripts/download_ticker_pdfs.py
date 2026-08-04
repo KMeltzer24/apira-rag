@@ -17,8 +17,16 @@ PDFS = (
         "aapl-fy2025-q4-earnings.pdf",
     ),
     (
+        "https://www.apple.com/newsroom/pdfs/fy2026q2/FY26_Q2_Consolidated_Financial_Statements.pdf",
+        "aapl-fy2026-q2-earnings.pdf",
+    ),
+    (
         "https://ir.tesla.com/_flysystem/s3/sec/000162828026026551/tsla-20260422-gen.pdf",
         "tsla-q1-2026-update.pdf",
+    ),
+    (
+        "https://assets-ir.tesla.com/tesla-contents/IR/TSLA-Q2-2026-Update.pdf",
+        "tsla-q2-2026-update.pdf",
     ),
 )
 

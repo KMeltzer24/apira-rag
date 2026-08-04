@@ -20,6 +20,10 @@ run_fetch \
   "msft-q3-fy2026-earnings"
 
 run_fetch \
+  "https://www.sec.gov/Archives/edgar/data/789019/000119312526323632/msft-ex99_1.htm" \
+  "msft-q4-fy2026-earnings"
+
+run_fetch \
   "https://www.sec.gov/Archives/edgar/data/1652044/000165204425000087/googexhibit991q32025.htm" \
   "googl-q3-2025-earnings"
 
