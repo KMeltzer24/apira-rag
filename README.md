@@ -26,6 +26,30 @@ apira-agent
 
 The vector table remains in the same RDS PostgreSQL database as the backend. See [docs/setup-pgvector-rds.md](docs/setup-pgvector-rds.md).
 
+## Chunking, metadata, and search ranking
+
+Ingest splits each research file into overlapping chunks (~800 chars). The
+chunker prefers markdown / Source headings, then paragraphs and sentences
+(not a blind fixed-window split).
+
+Each `research_chunks` row stores:
+
+| Column | Purpose |
+|--------|---------|
+| `content` + embedding | Semantic search |
+| `ticker` | From filename / headers when detectable |
+| `document_date` | From FY/Q patterns in the filename when present |
+| `section_title` | Heading at the start of the chunk when present |
+| `content_hash` | Skip unchanged files in `ingest_changed` |
+
+`searchVectorDB` ranks by similarity, then **prefers newer `document_date`
+values for the same ticker** so older overlapping chunks lose to newer ones.
+
+- Full rebuild (re-embed everything): `scripts/ingest_research.py`
+- New/changed files only: `scripts/ingest_changed.py`
+
+Details: [docs/how-stock-recommender-works.md](docs/how-stock-recommender-works.md).
+
 ## Local setup
 
 ```bash
@@ -97,7 +121,7 @@ sudo docker compose logs --since=10m rag-server | grep '<request-id>'
 
 See the shared [logging contract](https://github.com/KMeltzer24/apira/blob/main/docs/logging.md),
 [how logging works](https://github.com/KMeltzer24/apira/blob/main/docs/how-logging-works.md),
-and the [logging demo](https://github.com/KMeltzer24/apira/blob/main/docs/demo-logging.md).
+and [how logging works](https://github.com/KMeltzer24/apira/blob/main/docs/how-logging-works.md).
 
 ## Documentation
 
