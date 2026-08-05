@@ -223,7 +223,11 @@ Example: 6 analyst notes + 5 earnings extracts might produce ~80–120 chunks to
 
 `searchVectorDB` ranks by similarity, then **prefers newer `document_date` values for the same ticker** so older earnings chunks lose to newer ones when both match. Parameter reference (similarity formula, `limit`, candidate pool): [vector-search-params.md](vector-search-params.md).
 
-Optional SQL (also applied automatically by the app): `sql/migrate_research_chunks_metadata.sql`.
+Optional SQL (also applied automatically by the app):
+`sql/migrate_research_chunks_metadata.sql` and
+`sql/migrate_research_chunks_hnsw.sql`. The HNSW index uses
+`vector_cosine_ops`, matching the `<=>` cosine-distance search, and does not
+require re-embedding existing chunks.
 
 ### PDF fluff-page skipping
 

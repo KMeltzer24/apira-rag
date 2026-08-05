@@ -1,4 +1,4 @@
-"""Ensure research_chunks has metadata columns used by ingest/search."""
+"""Ensure research_chunks has metadata columns and search indexes."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ _METADATA_COLUMNS = (
 
 
 def ensure_research_chunk_schema() -> None:
-    """Add optional metadata columns if they are missing (idempotent)."""
+    """Add optional metadata columns and indexes if missing (idempotent)."""
     with get_connection() as conn:
         with conn.cursor() as cur:
             for name, sql_type in _METADATA_COLUMNS:
@@ -27,5 +27,15 @@ def ensure_research_chunk_schema() -> None:
                 """
                 CREATE INDEX IF NOT EXISTS research_chunks_ticker_date_idx
                 ON research_chunks (ticker, document_date DESC NULLS LAST)
+                """
+            )
+            # Search uses cosine distance (`embedding <=> query_vector`), so
+            # this HNSW index must use the matching vector_cosine_ops class.
+            cur.execute(
+                """
+                CREATE INDEX IF NOT EXISTS research_chunks_embedding_hnsw_idx
+                ON research_chunks
+                USING hnsw (embedding vector_cosine_ops)
+                WITH (m = 16, ef_construction = 64)
                 """
             )

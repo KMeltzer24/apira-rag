@@ -60,7 +60,24 @@ Optional metadata columns (ticker, document date, content hash) are in
 `sql/migrate_research_chunks_metadata.sql` and are also applied automatically by
 `rag/schema.py` on ingest/search.
 
-**Note:** This has already been run on the project RDS instance. Keep the SQL here for reference only.
+Cosine vector search uses an HNSW approximate-nearest-neighbor index:
+
+```sql
+CREATE INDEX IF NOT EXISTS research_chunks_embedding_hnsw_idx
+    ON research_chunks
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+```
+
+The same idempotent statement is in `sql/migrate_research_chunks_hnsw.sql` and
+is also applied automatically by `rag/schema.py`. No re-embedding is required.
+The app uses a regular (non-concurrent) build because schema setup runs inside
+a transaction and the current corpus is small. For a large production table,
+schedule a one-off `CREATE INDEX CONCURRENTLY` outside the app transaction.
+
+**Note:** The base table setup has already been run on the project RDS
+instance. Deploying this version of apira-rag applies the HNSW index
+automatically on the next ingest or vector search.
 
 ---
 
@@ -159,6 +176,26 @@ Check rows exist:
 ```sql
 SELECT COUNT(*) FROM research_chunks;
 SELECT filename, chunk_index, LEFT(content, 80) FROM research_chunks LIMIT 5;
+
+SELECT indexname, indexdef
+FROM pg_indexes
+WHERE tablename = 'research_chunks'
+ORDER BY indexname;
+```
+
+You should see `research_chunks_embedding_hnsw_idx` with
+`USING hnsw (embedding vector_cosine_ops)`.
+
+At only a few hundred rows, PostgreSQL may still choose a sequential scan
+because it is cheaper. That is expected; the HNSW index becomes useful as the
+corpus grows. Confirm the available plan with:
+
+```sql
+EXPLAIN
+SELECT filename
+FROM research_chunks
+ORDER BY embedding <=> '[...]'::vector
+LIMIT 20;
 ```
 
 ---

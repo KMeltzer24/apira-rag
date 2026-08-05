@@ -99,9 +99,33 @@ Q3→Sep 30, Q4→Dec 31 (calendar), based on the year in the filename.
 | Idea | Status |
 |------|--------|
 | Similarity floor (`min_score`) | Not implemented — weak matches can still return |
-| HNSW / IVFFlat index params | Table uses pgvector; ANN index tuning is a separate backlog item |
+| Per-query HNSW `ef_search` | Uses the pgvector default; tune only after measuring recall/latency |
 | Hybrid keyword + vector | Separate tool: `searchLocalFolder` |
 | Per-ticker quotas in `limit` | Prefer-newer only; no hard “one chunk per ticker” |
+
+## HNSW index
+
+The `embedding vector(768)` column has an HNSW approximate-nearest-neighbor
+index:
+
+```sql
+CREATE INDEX IF NOT EXISTS research_chunks_embedding_hnsw_idx
+    ON research_chunks
+    USING hnsw (embedding vector_cosine_ops)
+    WITH (m = 16, ef_construction = 64);
+```
+
+- `vector_cosine_ops` matches the search operator `<=>` (cosine distance).
+- `m = 16` controls graph connectivity. Higher values can improve recall but
+  increase index size and build/write cost.
+- `ef_construction = 64` controls build quality. Higher values take longer to
+  build but can improve recall.
+- HNSW does not need a training phase and works as rows are added.
+- No embedding rebuild is needed when creating the index.
+
+The index is applied idempotently by `rag/schema.py` and is also available as
+`sql/migrate_research_chunks_hnsw.sql`. The current corpus is small enough that
+PostgreSQL may still choose a sequential scan; that is valid and often faster.
 
 ## Quick checks
 

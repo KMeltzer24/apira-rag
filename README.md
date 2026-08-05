@@ -45,6 +45,12 @@ Each `research_chunks` row stores:
 `searchVectorDB` ranks by similarity, then **prefers newer `document_date`
 values for the same ticker** so older overlapping chunks lose to newer ones.
 
+Vector search is backed by an **HNSW** approximate-nearest-neighbor index on the
+`embedding` column (`vector_cosine_ops`, `m=16`, `ef_construction=64`), applied
+idempotently by `rag/schema.py` and mirrored in `sql/migrate_research_chunks_hnsw.sql`.
+No re-embedding is needed to add it. At a small corpus size PostgreSQL may still
+choose a sequential scan, which is expected.
+
 - Full rebuild (re-embed everything): `scripts/ingest_research.py`
 - New/changed files only: `scripts/ingest_changed.py`
 
@@ -120,11 +126,11 @@ sudo docker compose logs -f rag-server
 sudo docker compose logs --since=10m rag-server | grep '<request-id>'
 ```
 
-See the shared [logging contract](https://github.com/KMeltzer24/apira/blob/main/docs/logging.md),
-[how logging works](https://github.com/KMeltzer24/apira/blob/main/docs/how-logging-works.md),
+See the shared [logging contract](https://github.com/KMeltzer24/apira/blob/main/docs/logging.md)
 and [how logging works](https://github.com/KMeltzer24/apira/blob/main/docs/how-logging-works.md).
 
 ## Documentation
 
 - [How the stock recommender works](docs/how-stock-recommender-works.md)
+- [Vector search parameters (similarity, limit, prefer-newer, HNSW)](docs/vector-search-params.md)
 - [pgvector/RDS setup](docs/setup-pgvector-rds.md)
