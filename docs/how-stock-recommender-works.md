@@ -13,7 +13,7 @@ The Recommender tab lets you pick **local folder** or **vector DB** search via a
 |------|----------------------|
 | **apira-rag** (this repo) | Research tools, RAG pipeline, and `stock-research/` corpus |
 | [apira-mcp](https://github.com/KMeltzer24/apira-mcp) | `login` and `get_portfolio` tools |
-| [apira-agent](https://github.com/KMeltzer24/apira-agent) | LangGraph + Gemini — orchestrates tool calls |
+| [apira-agent](https://github.com/KMeltzer24/apira-agent) | LangGraph supervisor + portfolio/research specialists |
 | [apira-frontend](https://github.com/KMeltzer24/apira-frontend) | Recommender tab — sends one `POST /chat` prompt |
 | [apira](https://github.com/KMeltzer24/apira) | Backend APIs (`login`, `get_portfolio`) via MCP |
 
@@ -23,7 +23,7 @@ The Recommender tab lets you pick **local folder** or **vector DB** search via a
 
 ## The big picture
 
-Local-folder search does **not** search the user's Mac. Research files live in `stock-research/` on **EC2**, mounted into the apira-rag container. When a user clicks **Get Recommendations**, the frontend sends a structured prompt to the agent; Gemini decides which tools to call across the two MCP servers, then writes natural-language recommendations.
+Local-folder search does **not** search the user's Mac. Research files live in `stock-research/` on **EC2**, mounted into the apira-rag container. When a user clicks **Get Recommendations**, the frontend sends a structured prompt to the agent. The **supervisor** routes to the **portfolio** specialist (`login`, `get_portfolio`) then the **research** specialist (`searchLocalFolder` or `searchVectorDB`), then finishes with natural-language recommendations.
 
 ```
 User (Recommender tab)
@@ -33,6 +33,7 @@ apira-frontend (:3000 on Mac)
   │  POST /chat { message: "Log in as alice… searchLocalFolder…" }
   ▼
 apira-agent (:8100 on EC2)
+  │  supervisor → portfolio → research
   │
   ├── apira-mcp (:8000)
   ├── login          → user-service (:8001) → RDS
@@ -42,7 +43,7 @@ apira-agent (:8100 on EC2)
       ├── searchLocalFolder → stock-research/ on EC2
       └── searchVectorDB    → research_chunks in RDS
   ▼
-Gemini summarizes → { "reply": "…hold AAPL… trim TSLA…" }
+Gemini (research specialist) → { "reply": "…hold AAPL… trim TSLA…" }
   ▼
 Frontend renders reply
 ```
@@ -58,7 +59,7 @@ The frontend never calls MCP or reads files directly. It only talks to the agent
 | Research files | `~/apira-rag/stock-research/` on EC2 | Analyst notes, PDFs, and extracted text |
 | RAG mount | `/data/stock-research` inside container | Docker volume |
 | `searchLocalFolder` | `server.py` in this repo | Scans `.txt` and `.md` only |
-| System prompt | `agent.py` in apira-agent | Tells Gemini when to use each tool |
+| Specialist prompts | `graph.py` in apira-agent | Supervisor routes; research specialist picks one search tool |
 | UI trigger | `StockRecommenderScreen` in apira-frontend | Username + password → preset prompt |
 
 ---
@@ -69,13 +70,12 @@ When the user opens the **Recommender** tab, enters `alice` / `password`, and cl
 
 1. **Frontend** builds a fixed prompt (see below) and sends `POST http://<EC2>:8100/chat`.
 
-2. **Agent** receives the message. On the first request it connects to both MCP servers and discovers `login`, `get_portfolio`, `searchLocalFolder`, and `searchVectorDB`.
+2. **Agent** receives the message. On the first request it connects to both MCP servers, partitions tools onto specialists (`login` / `get_portfolio` vs the two search tools), and compiles the supervisor graph.
 
-3. **Gemini** decides the tool chain. Typical order:
-   - `login("alice", "password")` → `{ user_id: 1, … }`
-   - `get_portfolio(1)` → `{ holdings: [ AAPL, MSFT, GOOGL, … ] }`
-   - `searchLocalFolder("AAPL")`, `searchLocalFolder("MSFT")`, … (one or more calls per ticker)
-   - Optionally `searchLocalFolder("tech")` or `searchLocalFolder("")` for sector overviews
+3. **Supervisor** routes. Typical order:
+   - **portfolio** specialist: `login("alice", "password")` → `{ user_id: 1, … }`, then `get_portfolio(1)` → holdings
+   - **research** specialist: `searchLocalFolder("AAPL")`, `searchLocalFolder("MSFT")`, … (or `searchVectorDB` if that mode was selected)
+   - supervisor finishes with the research specialist's Hold/Add/Trim text
 
 4. **`searchLocalFolder`** walks `/data/stock-research`, reads matching files, returns JSON:
 
@@ -276,15 +276,15 @@ That single string is the entire contract between frontend and agent.
 
 ---
 
-## Agent system prompt
+## Agent prompts
 
-The agent's `SYSTEM_PROMPT` in [apira-agent/agent.py](https://github.com/KMeltzer24/apira-agent/blob/main/agent.py) adds standing instructions:
+Standing instructions live in [apira-agent/graph.py](https://github.com/KMeltzer24/apira-agent/blob/main/graph.py):
 
-- Log in before fetching a portfolio
-- For recommendations, call `searchLocalFolder` with ticker symbols from holdings
-- Cite which research files informed the advice
+- **Supervisor** — route to `portfolio`, `research`, or finish (chat with no tools)
+- **Portfolio specialist** — log in before `get_portfolio`
+- **Research specialist** — use the search tool named in the user message (never both unless asked); cite files; Hold/Add/Trim
 
-Gemini combines the system prompt with the user's message from the Recommender tab.
+Gemini combines those prompts with the Recommender tab message.
 
 ---
 
@@ -464,5 +464,5 @@ can change when extraction or chunking rules improve.
 | [vector-search-params.md](vector-search-params.md) | `similarity`, `limit`, prefer-newer ranking |
 | [stock-research/pdfs/README.md](../stock-research/pdfs/README.md) | Ticker PDF sources, ingest commands, Google PDF search |
 | [apira: architecture.md](https://github.com/KMeltzer24/apira/blob/main/docs/architecture.md) | Full system diagram |
-| [apira-agent: how-the-agent-works.md](https://github.com/KMeltzer24/apira-agent/blob/main/docs/how-the-agent-works.md) | LangGraph + Gemini setup |
+| [apira-agent: how-the-agent-works.md](https://github.com/KMeltzer24/apira-agent/blob/main/docs/how-the-agent-works.md) | Supervisor + specialist graph |
 | [apira-frontend: how-the-frontend-works.md](https://github.com/KMeltzer24/apira-frontend/blob/main/docs/how-the-frontend-works.md) | Three UI tabs |

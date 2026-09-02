@@ -4,14 +4,14 @@ Research ingestion and retrieval service for the Apira stock recommender.
 
 It owns:
 
-- `searchLocalFolder` — keyword search over research files on EC2
+- `searchLocalFolder` — keyword search over research files (`stock-research/`)
 - `searchVectorDB` — semantic search over pgvector
 - PDF and SEC extraction
 - Chunking and Gemini embeddings
 - The `stock-research/` corpus
 - Ingest, purge, and rebuild scripts
 
-The service exposes MCP over Streamable HTTP at `http://<host>:8200/mcp`. The Apira agent connects to this server for research tools and to `apira-mcp` for login/portfolio tools.
+The service exposes MCP over Streamable HTTP at `http://<host>:8200/mcp`. Apira's **research** specialist in [apira-agent](https://github.com/KMeltzer24/apira-agent) calls these tools; login/portfolio tools stay on `apira-mcp` (the **portfolio** specialist).
 
 ## Architecture
 
