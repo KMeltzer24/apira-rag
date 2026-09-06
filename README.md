@@ -90,7 +90,7 @@ Re-extract PDFs and refresh the vector index:
 docker compose run --rm rag-server bash scripts/rebuild_vector_corpus.sh
 ```
 
-For mentor demos, **Local folder** search works without ingest. Vector DB needs the ingest step above.
+For demos, **Local folder** search works without ingest. Vector DB needs the ingest step above.
 
 ## Logging and correlation
 
