@@ -155,5 +155,5 @@ older same-ticker chunks when both are in the candidate pool.
 ## Related docs
 
 - [how-stock-recommender-works.md](how-stock-recommender-works.md) — end-to-end recommender + ingest
-- [setup-pgvector-rds.md](setup-pgvector-rds.md) — RDS / pgvector setup
+- [apira run-locally.md](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md) — local Postgres + stack
 - [stock-research/pdfs/README.md](../stock-research/pdfs/README.md) — PDF corpus

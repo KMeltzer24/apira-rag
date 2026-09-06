@@ -11,7 +11,7 @@ It owns:
 - The `stock-research/` corpus
 - Ingest, purge, and rebuild scripts
 
-The service exposes MCP over Streamable HTTP at `http://<host>:8200/mcp`. Apira's **research** specialist in [apira-agent](https://github.com/KMeltzer24/apira-agent) calls these tools; login/portfolio tools stay on `apira-mcp` (the **portfolio** specialist).
+The service exposes MCP over Streamable HTTP at `http://localhost:8200/mcp`. Apira's **research** specialist in [apira-agent](https://github.com/KMeltzer24/apira-agent) calls these tools; login/portfolio tools stay on `apira-mcp` (the **portfolio** specialist).
 
 ## Architecture
 
@@ -21,10 +21,10 @@ apira-agent
 └── apira-rag :8200 → searchLocalFolder, searchVectorDB
                          ├── stock-research/
                          ├── Gemini embeddings
-                         └── RDS research_chunks (pgvector)
+                         └── Postgres research_chunks (pgvector)
 ```
 
-The vector table remains in the same RDS PostgreSQL database as the backend. See [docs/setup-pgvector-rds.md](docs/setup-pgvector-rds.md).
+The vector table lives in the **same local PostgreSQL** as the backend (`docker-compose.local.yml` in apira). See [apira run-locally.md](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md).
 
 ## Chunking, metadata, and search ranking
 
@@ -61,7 +61,8 @@ Vector params (`similarity`, `limit`, prefer-newer): [docs/vector-search-params.
 
 ```bash
 cp .env.example .env
-# Set DATABASE_URL and GOOGLE_API_KEY
+# DATABASE_URL=postgresql+psycopg2://apira:apira@host.docker.internal:5432/apira
+# GOOGLE_API_KEY=<gemini-key>   # needed for searchVectorDB / ingest
 docker compose up -d --build
 ```
 
@@ -89,28 +90,7 @@ Re-extract PDFs and refresh the vector index:
 docker compose run --rm rag-server bash scripts/rebuild_vector_corpus.sh
 ```
 
-## Deploy to EC2
-
-From the repository root on your Mac:
-
-```bash
-tar czf /tmp/apira-rag-deploy.tgz \
-  server.py apira_logging.py request_logging.py requirements.txt \
-  Dockerfile .dockerignore docker-compose.yml \
-  .env.example rag scripts sql stock-research docs tests
-
-scp -i ../apira/my-ec2-key.pem /tmp/apira-rag-deploy.tgz \
-  ec2-user@<EC2_PUBLIC_IP>:/tmp/
-
-ssh -i ../apira/my-ec2-key.pem ec2-user@<EC2_PUBLIC_IP> \
-  "mkdir -p ~/apira-rag && \
-   tar xzf /tmp/apira-rag-deploy.tgz -C ~/apira-rag && \
-   cd ~/apira-rag && \
-   test -f .env || cp .env.example .env && \
-   sudo docker compose up -d --build"
-```
-
-Set `DATABASE_URL` and `GOOGLE_API_KEY` in `~/apira-rag/.env`. Port `8200` only needs to be reachable from the co-located agent; it does not need a public security-group rule.
+For mentor demos, **Local folder** search works without ingest. Vector DB needs the ingest step above.
 
 ## Logging and correlation
 
@@ -122,8 +102,8 @@ they omit query text, document contents, vectors, credentials, and tool argument
 values.
 
 ```bash
-sudo docker compose logs -f rag-server
-sudo docker compose logs --since=10m rag-server | grep '<request-id>'
+docker compose logs -f rag-server
+docker compose logs --since=10m rag-server | grep '<request-id>'
 ```
 
 See the shared [logging contract](https://github.com/KMeltzer24/apira/blob/main/docs/logging.md)
@@ -133,4 +113,4 @@ and [how logging works](https://github.com/KMeltzer24/apira/blob/main/docs/how-l
 
 - [How the stock recommender works](docs/how-stock-recommender-works.md)
 - [Vector search parameters (similarity, limit, prefer-newer, HNSW)](docs/vector-search-params.md)
-- [pgvector/RDS setup](docs/setup-pgvector-rds.md)
+- [Run the full stack locally](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md)

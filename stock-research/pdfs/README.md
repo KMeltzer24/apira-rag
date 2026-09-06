@@ -1,6 +1,6 @@
 # Ticker research PDFs
 
-These PDFs are **committed to the repo** and deploy to EC2 with the rest of `stock-research/` — same as the analyst `.md` / `.txt` files. They are **not** re-downloaded on each deploy or ingest.
+These PDFs are **committed to the repo** with the rest of `stock-research/` — same as the analyst `.md` / `.txt` files. They are **not** re-downloaded on each start or ingest.
 
 | File | Ticker | Source |
 |------|--------|--------|
@@ -26,12 +26,12 @@ Newer same-ticker pairs for **prefer-newer** ranking tests:
 
 After adding files, run `scripts/ingest_changed.py` (or full ingest) so pgvector picks them up.
 
-## Normal use (EC2)
+## Normal use
 
-Deploy includes PDFs + extracted text. Embed into pgvector:
+Embed into local Postgres pgvector:
 
 ```bash
-sudo docker compose run --rm mcp-server bash scripts/ingest_ticker_research.sh
+docker compose run --rm rag-server bash scripts/ingest_ticker_research.sh
 ```
 
 That **only embeds** — it does not download anything new.

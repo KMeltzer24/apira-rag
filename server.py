@@ -50,7 +50,7 @@ def _file_matches_query(path: Path, content: str, query: str) -> bool:
 
 @mcp.tool()
 async def searchLocalFolder(query: str = "") -> dict:
-    """Search text and Markdown stock research stored on EC2."""
+    """Search text and Markdown stock research in the stock-research folder."""
     root = _resolve_research_dir()
     matches = []
     total_bytes = 0

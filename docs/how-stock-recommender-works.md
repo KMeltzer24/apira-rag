@@ -2,8 +2,8 @@
 
 This doc explains the stock-recommendation feature across two phases:
 
-- **Phase I** — `searchLocalFolder` reads `.txt` / `.md` files from `stock-research/` on EC2
-- **Phase II** — RAG pipeline ingests those files into **pgvector on RDS**; `searchVectorDB` does semantic search
+- **Phase I** — `searchLocalFolder` reads `.txt` / `.md` files from `stock-research/` in this repo
+- **Phase II** — RAG pipeline ingests those files into **pgvector on local Postgres**; `searchVectorDB` does semantic search
 
 The Recommender tab lets you pick **local folder** or **vector DB** search via a radio button.
 
@@ -17,13 +17,13 @@ The Recommender tab lets you pick **local folder** or **vector DB** search via a
 | [apira-frontend](https://github.com/KMeltzer24/apira-frontend) | Recommender tab — sends one `POST /chat` prompt |
 | [apira](https://github.com/KMeltzer24/apira) | Backend APIs (`login`, `get_portfolio`) via MCP |
 
-**Phase II:** `searchVectorDB` + RAG ingestion into PostgreSQL/pgvector on the **same RDS instance** as the backend. See [setup-pgvector-rds.md](setup-pgvector-rds.md) for AWS steps.
+**Phase II:** `searchVectorDB` + RAG ingestion into PostgreSQL/pgvector on the **same local Postgres** as the backend. See [apira run-locally.md](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md) and [vector-search-params.md](vector-search-params.md).
 
 ---
 
 ## The big picture
 
-Local-folder search does **not** search the user's Mac. Research files live in `stock-research/` on **EC2**, mounted into the apira-rag container. When a user clicks **Get Recommendations**, the frontend sends a structured prompt to the agent. The **supervisor** routes to the **portfolio** specialist (`login`, `get_portfolio`) then the **research** specialist (`searchLocalFolder` or `searchVectorDB`), then finishes with natural-language recommendations.
+Research files live in `stock-research/` in this repo, mounted into the apira-rag container. When a user clicks **Get Recommendations**, the frontend sends a structured prompt to the agent. The **supervisor** routes to the **portfolio** specialist (`login`, `get_portfolio`) then the **research** specialist (`searchLocalFolder` or `searchVectorDB`), then finishes with natural-language recommendations.
 
 ```
 User (Recommender tab)
@@ -32,16 +32,16 @@ User (Recommender tab)
 apira-frontend (:3000 on Mac)
   │  POST /chat { message: "Log in as alice… searchLocalFolder…" }
   ▼
-apira-agent (:8100 on EC2)
+apira-agent (:8100)
   │  supervisor → portfolio → research
   │
   ├── apira-mcp (:8000)
-  ├── login          → user-service (:8001) → RDS
-  ├── get_portfolio  → portfolio-service (:8002) → RDS
+  ├── login          → user-service (:8001) → Postgres
+  ├── get_portfolio  → portfolio-service (:8002) → Postgres
   │
   └── apira-rag (:8200)
-      ├── searchLocalFolder → stock-research/ on EC2
-      └── searchVectorDB    → research_chunks in RDS
+      ├── searchLocalFolder → stock-research/
+      └── searchVectorDB    → research_chunks in Postgres
   ▼
 Gemini (research specialist) → { "reply": "…hold AAPL… trim TSLA…" }
   ▼
@@ -56,7 +56,7 @@ The frontend never calls MCP or reads files directly. It only talks to the agent
 
 | Piece | Location | Notes |
 |-------|----------|-------|
-| Research files | `~/apira-rag/stock-research/` on EC2 | Analyst notes, PDFs, and extracted text |
+| Research files | `stock-research/` in this repo | Analyst notes, PDFs, and extracted text |
 | RAG mount | `/data/stock-research` inside container | Docker volume |
 | `searchLocalFolder` | `server.py` in this repo | Scans `.txt` and `.md` only |
 | Specialist prompts | `graph.py` in apira-agent | Supervisor routes; research specialist picks one search tool |
@@ -68,7 +68,7 @@ The frontend never calls MCP or reads files directly. It only talks to the agent
 
 When the user opens the **Recommender** tab, enters `alice` / `password`, and clicks **Get Recommendations**:
 
-1. **Frontend** builds a fixed prompt (see below) and sends `POST http://<EC2>:8100/chat`.
+1. **Frontend** builds a fixed prompt (see below) and sends `POST http://localhost:8100/chat`.
 
 2. **Agent** receives the message. On the first request it connects to both MCP servers, partitions tools onto specialists (`login` / `get_portfolio` vs the two search tools), and compiles the supervisor graph.
 
@@ -156,7 +156,7 @@ Sample files are **ticker-specific analyst-style notes** — rating, outlook, ri
 | `tsla-analysis.md` | Tesla — hold, high volatility |
 | `tech-sector-overview.md` | Sector themes and allocation guidance |
 
-Additional **live earnings data** lives under `stock-research/pdfs/` (PDF) and `stock-research/extracted/` (text from PDFs or SEC HTML). These files are **committed to the repo** and deploy to EC2 like the analyst notes — they are not re-downloaded each time. See [stock-research/pdfs/README.md](../stock-research/pdfs/README.md).
+Additional **live earnings data** lives under `stock-research/pdfs/` (PDF) and `stock-research/extracted/` (text from PDFs or SEC HTML). These files are **committed to the repo** — they are not re-downloaded each time. See [stock-research/pdfs/README.md](../stock-research/pdfs/README.md).
 
 Extracted filenames show origin: `*.from-pdf.txt` (from a PDF) or `*.from-sec.txt` (from SEC HTML). Each file starts with a `# Source: …` header.
 
@@ -164,12 +164,12 @@ Extracted filenames show origin: `*.from-pdf.txt` (from a PDF) or `*.from-sec.tx
 
 | Mode | Where research lives | How agent reads it |
 |------|---------------------|-------------------|
-| **Local folder** | `.md` / `.txt` on EC2 disk | `searchLocalFolder` reads files directly at query time |
-| **Vector DB** | Same files, plus `extracted/` text | Files are chunked, embedded, stored in RDS `research_chunks`; `searchVectorDB` does semantic search |
+| **Local folder** | `.md` / `.txt` in the container mount | `searchLocalFolder` reads files directly at query time |
+| **Vector DB** | Same files, plus `extracted/` text | Files are chunked, embedded, stored in Postgres `research_chunks`; `searchVectorDB` does semantic search |
 
 ### Ingest does not call `searchLocalFolder`
 
-Both modes use the **same** `stock-research/` folder on EC2. Ingest scripts (`ingest_research.py`, `pdf_inject.py`, etc.) read that folder **directly from disk** — they do not invoke the `searchLocalFolder` MCP tool. Local search reads files when the user asks; vector search reads files when you run ingest, then queries the embeddings later via `searchVectorDB`. After adding or changing research files, run ingest so vector search stays in sync.
+Both modes use the **same** `stock-research/` folder. Ingest scripts (`ingest_research.py`, `pdf_inject.py`, etc.) read that folder **directly from disk** — they do not invoke the `searchLocalFolder` MCP tool. Local search reads files when the user asks; vector search reads files when you run ingest, then queries the embeddings later via `searchVectorDB`. After adding or changing research files, run ingest so vector search stays in sync.
 
 ### Ingestion is manual (not automatic)
 
@@ -179,7 +179,7 @@ Nothing ingests when you drop a file on disk. You must run a script:
 New .md / .txt in stock-research/
         │
         ▼
-scripts/ingest_research.py  ──► chunk → embed → research_chunks (RDS)
+scripts/ingest_research.py  ──► chunk → embed → research_chunks (Postgres)
 
 New PDF in stock-research/pdfs/
         │
@@ -249,7 +249,7 @@ To find new research PDFs:
 1. Search ticker-specific queries, e.g. `MSFT earnings Q3 2026 filetype:pdf`
 2. Google **Tools → Advanced search → File type: PDF**
 3. Prefer official sources: company newsroom, investor relations, SEC EDGAR
-4. Copy to EC2 `stock-research/pdfs/` and run `pdf_inject.py`
+4. Copy into `stock-research/pdfs/` and run `pdf_inject.py`
 
 If the best result is SEC HTML (Exhibit 99.1), use `fetch_sec_exhibit.py` instead — many companies publish earnings as HTML on SEC, not PDF.
 
@@ -288,27 +288,24 @@ Gemini combines those prompts with the Recommender tab message.
 
 ---
 
-## Deploy and update
+## Update locally
 
 Research files and the tool ship with **this repo**. After changes:
 
 ```bash
-# From Mac — include stock-research/ in the apira-rag tarball (see README)
-tar czf /tmp/apira-rag-deploy.tgz … stock-research
-# scp + docker compose up -d --build on EC2
+cd ~/apira-rag && docker compose up -d --build
 ```
 
 Then **restart the agent** so it reloads tools from MCP:
 
 ```bash
-# on EC2
-cd ~/apira-agent && sudo docker compose restart
+cd ~/apira-agent && docker compose restart
 ```
 
 Frontend changes (Recommender tab) rebuild locally:
 
 ```bash
-cd apira-frontend && docker compose up -d --build
+cd ~/apira-frontend && docker compose up -d --build
 ```
 
 ---
@@ -320,7 +317,7 @@ cd apira-frontend && docker compose up -d --build
 **From curl** (same path the UI uses):
 
 ```bash
-curl -s -X POST http://<EC2_PUBLIC_IP>:8100/chat \
+curl -s -X POST http://localhost:8100/chat \
   -H "Content-Type: application/json" \
   -d '{"message":"Log in as alice with password password. Retrieve their portfolio holdings. Use searchLocalFolder to find stock research files for each ticker. Respond with one entry per holding: **TICKER (Company)** — Hold/Add/Trim, then Files: ..., then one or two short sentences. Keep it concise. No sector overview."}'
 ```
@@ -345,7 +342,7 @@ stock-research/
 scripts/ingest_research.py  |  pdf_inject.py  |  fetch_sec_exhibit.py
         │  chunk → embed (Gemini gemini-embedding-001, 768 dims)
         ▼
-RDS PostgreSQL — research_chunks table (pgvector)
+PostgreSQL — research_chunks table (pgvector)
         │
         ▼
 searchVectorDB MCP tool  →  agent  →  Recommender UI (Vector DB mode)
@@ -356,7 +353,7 @@ searchVectorDB MCP tool  →  agent  →  Recommender UI (Vector DB mode)
 | Ingest scripts | `scripts/ingest_research.py`, `pdf_inject.py`, `fetch_sec_exhibit.py`, `ingest_ticker_research.sh` |
 | PDF extraction | `rag/pdf_extract.py` (fluff-page skipping) |
 | RAG code | `rag/` (chunk, embed, ingest, search) |
-| Vector storage | RDS table `research_chunks` — **same Postgres as users/portfolios** |
+| Vector storage | Postgres table `research_chunks` — **same DB as users/portfolios** |
 | MCP tool | `searchVectorDB(query, limit=5)` |
 
 ### Demo ticker earnings corpus
@@ -374,11 +371,11 @@ These complement the analyst notes — they carry **current financial results** 
 ### PDF injector
 
 ```bash
-# Local
+# On the host
 python scripts/pdf_inject.py stock-research/pdfs/aapl-fy2025-q4-earnings.pdf
 
-# EC2
-sudo docker compose run --rm rag-server \
+# Or inside the container
+docker compose run --rm rag-server \
   python scripts/pdf_inject.py /data/stock-research/pdfs/aapl-fy2025-q4-earnings.pdf
 ```
 
@@ -395,11 +392,11 @@ The Recommender tab radio buttons tell the agent which tool to use:
 
 ### Verify the vector index
 
-On EC2, list indexed files and chunk counts:
+List indexed files and chunk counts:
 
 ```bash
 cd ~/apira-rag
-sudo docker compose run --rm rag-server \
+docker compose run --rm rag-server \
   python scripts/purge_vector_index.py --list
 ```
 
@@ -407,7 +404,7 @@ Run semantic search directly and inspect matched filenames, chunks, and
 similarity scores:
 
 ```bash
-sudo docker compose run --rm rag-server python -c "
+docker compose run --rm rag-server python -c "
 import json
 from rag.search import search_vector_db
 print(json.dumps(
@@ -417,12 +414,11 @@ print(json.dumps(
 "
 ```
 
-The current rebuilt corpus has 244 chunks across 11 files. Exact chunk counts
-can change when extraction or chunking rules improve.
+Chunk counts change when extraction or chunking rules improve.
 
-### AWS changes
+### Local Postgres
 
-**No new RDS instance.** Enable pgvector on the existing database and add `DATABASE_URL` + `GOOGLE_API_KEY` to MCP `.env`. Full checklist: [setup-pgvector-rds.md](setup-pgvector-rds.md).
+Use the pgvector image from [apira run-locally.md](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md). Set `DATABASE_URL` + `GOOGLE_API_KEY` in apira-rag `.env`, then run ingest. Schema is applied by `rag/schema.py`.
 
 ---
 
@@ -430,8 +426,8 @@ can change when extraction or chunking rules improve.
 
 | Not included | Notes |
 |--------------|-------|
-| Local Mac filesystem search | Files are on EC2 only |
-| Separate vector DB service | Vectors live in RDS PostgreSQL (pgvector) |
+| Searching arbitrary paths on the Mac | Files come from the `stock-research/` mount |
+| Separate vector DB service | Vectors live in PostgreSQL (pgvector) |
 | Separate `stockRecommender` MCP tool | Recommendations are agent behavior + search tools |
 | Using both search tools at once | UI selects one mode per request |
 | Shared login with Portfolio tab | Recommender asks for credentials again |
@@ -443,15 +439,15 @@ can change when extraction or chunking rules improve.
 
 | Problem | Likely cause | Fix |
 |---------|--------------|-----|
-| Agent ignores research files | Agent not restarted after MCP deploy | `sudo docker compose restart` in `~/apira-agent/` |
-| `searchLocalFolder` returns empty | `stock-research/` not mounted | Check `docker-compose.yml` volume; redeploy MCP |
-| Generic advice, no file citations | Gemini skipped tool calls | Retry; check agent logs on EC2 |
-| "Stock research folder not found" | Volume missing on EC2 | Ensure tarball included `stock-research/` |
+| Agent ignores research files | Agent not restarted after RAG rebuild | `docker compose restart` in `~/apira-agent/` |
+| `searchLocalFolder` returns empty | `stock-research/` not mounted | Check `docker-compose.yml` volume; rebuild RAG |
+| Generic advice, no file citations | Gemini skipped tool calls | Retry; check agent logs |
+| "Stock research folder not found" | Volume missing | Ensure `stock-research/` is in the image/volume |
 | Timeout / slow | Many tickers → many tool calls + LLM | Normal for alice's 5 holdings; wait or use curl to debug |
 | `searchVectorDB` returns empty | Research not ingested | Run `scripts/ingest_research.py` or `ingest_ticker_research.sh` |
 | Vector search returns generic advice | Wrong corpus (e.g. SEC education PDFs) | Use ticker-specific earnings PDFs / SEC exhibits — see [pdfs/README.md](../stock-research/pdfs/README.md) |
 | `429 RESOURCE_EXHAUSTED` during ingest | Gemini embedding rate limit | Wait 30s and re-run; scripts retry automatically |
-| pgvector / embedding errors | Extension or env missing | See [setup-pgvector-rds.md](setup-pgvector-rds.md) |
+| pgvector / embedding errors | Extension or env missing | Check `DATABASE_URL` / `GOOGLE_API_KEY`; see [run-locally.md](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md) |
 
 ---
 
@@ -460,7 +456,7 @@ can change when extraction or chunking rules improve.
 | Doc | Content |
 |-----|---------|
 | [apira-mcp: how-mcp-works.md](https://github.com/KMeltzer24/apira-mcp/blob/main/docs/how-mcp-works.md) | MCP protocol and tool discovery |
-| [setup-pgvector-rds.md](setup-pgvector-rds.md) | AWS + RDS pgvector setup (Phase II) |
+| [apira: run-locally.md](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md) | Local Postgres + full stack |
 | [vector-search-params.md](vector-search-params.md) | `similarity`, `limit`, prefer-newer ranking |
 | [stock-research/pdfs/README.md](../stock-research/pdfs/README.md) | Ticker PDF sources, ingest commands, Google PDF search |
 | [apira: architecture.md](https://github.com/KMeltzer24/apira/blob/main/docs/architecture.md) | Full system diagram |

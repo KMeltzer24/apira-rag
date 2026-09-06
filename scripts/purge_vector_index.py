@@ -49,7 +49,7 @@ def purge_all() -> int:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Manage research_chunks in RDS.")
+    parser = argparse.ArgumentParser(description="Manage research_chunks in Postgres.")
     group = parser.add_mutually_exclusive_group(required=True)
     group.add_argument("--list", action="store_true", help="List embedded paths")
     group.add_argument(
