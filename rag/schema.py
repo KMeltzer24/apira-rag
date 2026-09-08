@@ -1,4 +1,4 @@
-"""Ensure research_chunks has metadata columns and search indexes."""
+"""Ensure research_chunks exists with metadata columns and search indexes."""
 
 from __future__ import annotations
 
@@ -13,9 +13,28 @@ _METADATA_COLUMNS = (
 
 
 def ensure_research_chunk_schema() -> None:
-    """Add optional metadata columns and indexes if missing (idempotent)."""
+    """Create the table if needed; add metadata columns and indexes (idempotent)."""
     with get_connection() as conn:
         with conn.cursor() as cur:
+            cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+            cur.execute(
+                """
+                CREATE TABLE IF NOT EXISTS research_chunks (
+                    id BIGSERIAL PRIMARY KEY,
+                    filename TEXT NOT NULL,
+                    relative_path TEXT NOT NULL,
+                    chunk_index INTEGER NOT NULL,
+                    content TEXT NOT NULL,
+                    embedding vector(768) NOT NULL,
+                    content_hash TEXT,
+                    ticker TEXT,
+                    document_date DATE,
+                    section_title TEXT,
+                    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                    UNIQUE (relative_path, chunk_index)
+                )
+                """
+            )
             for name, sql_type in _METADATA_COLUMNS:
                 cur.execute(
                     f"""
