@@ -77,6 +77,8 @@ When the user opens the **Recommender** tab, enters `alice` / `password`, and cl
    - **research** specialist: `searchLocalFolder("AAPL")`, `searchLocalFolder("MSFT")`, … (or `searchVectorDB` if that mode was selected)
    - supervisor finishes with the research specialist's Hold/Add/Trim text
 
+   The agent also **enforces** this order: if the user asked for search / Hold-Add-Trim and no research tool has run yet, finishing after portfolio is overridden to `research` (see apira-agent `enforce_research_routing`). Portfolio must not invent `Files: N/A`.
+
 4. **`searchLocalFolder`** walks `/data/stock-research`, reads matching files, returns JSON:
 
    ```json
