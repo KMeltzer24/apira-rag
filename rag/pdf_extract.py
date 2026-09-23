@@ -15,7 +15,6 @@ from apira_logging import get_logger, log_event
 
 logger = get_logger("apira-rag")
 
-# Patterns common on covers, legal pages, and navigation pages.
 FLUFF_PATTERNS = (
     r"all rights reserved",
     r"©\s*\d{4}",
@@ -36,7 +35,6 @@ FLUFF_PATTERNS = (
 
 FLUFF_RE = re.compile("|".join(f"({p})" for p in FLUFF_PATTERNS), re.IGNORECASE | re.MULTILINE)
 
-# Standalone lines that add no useful retrieval context.
 NOISE_LINE_RE = re.compile(
     r"^(?:"
     r"page\s+\d+(?:\s+of\s+\d+)?"
@@ -50,7 +48,6 @@ NOISE_LINE_RE = re.compile(
     re.IGNORECASE,
 )
 
-# Words that suggest substantive investment or company content.
 SIGNAL_WORDS = (
     "stock",
     "portfolio",
@@ -213,7 +210,6 @@ def fluff_reason(text: str) -> str | None:
     if word_count >= 180 and signals >= 2:
         return None
 
-    # Mostly boilerplate with little investment vocabulary.
     if fluff_hits >= 2 and signals < 2:
         return "legal or publication boilerplate"
     if "table of contents" in stripped.casefold() and financial_terms == 0:

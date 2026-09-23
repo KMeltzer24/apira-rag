@@ -1,4 +1,4 @@
--- Optional one-time metadata columns for Phase V RAG improvements.
+-- Metadata columns for ticker/date ranking and change detection.
 -- Safe to re-run. apira-rag also applies these via rag/schema.py on ingest/search.
 
 ALTER TABLE research_chunks ADD COLUMN IF NOT EXISTS content_hash TEXT;
