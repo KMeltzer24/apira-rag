@@ -11,14 +11,14 @@ It owns:
 - The `stock-research/` corpus
 - Ingest, purge, and rebuild scripts
 
-The service exposes MCP over Streamable HTTP at `http://localhost:8200/mcp`. Apira's **research** specialist in [apira-agent](https://github.com/KMeltzer24/apira-agent) calls these tools; login/portfolio tools stay on `apira-mcp` (the **portfolio** specialist).
+The service exposes MCP over Streamable HTTP at `http://localhost:8200/mcp`. The [apira-agent](https://github.com/KMeltzer24/apira-agent) **research** container calls these tools; login/portfolio tools stay on `apira-mcp` (the **portfolio** container).
 
 ## Architecture
 
 ```text
-apira-agent
-├── apira-mcp :8000 → login, get_portfolio
-└── apira-rag :8200 → searchLocalFolder, searchVectorDB
+apira-agent supervisor :8100
+├── A2A portfolio :8110 → apira-mcp :8000 → login, get_portfolio
+└── A2A research :8120 → apira-rag :8200 → searchLocalFolder, searchVectorDB
                          ├── stock-research/
                          ├── Gemini embeddings
                          └── Postgres research_chunks (pgvector)
@@ -63,6 +63,7 @@ Vector params (`similarity`, `limit`, prefer-newer): [docs/vector-search-params.
 cp .env.example .env
 # DATABASE_URL=postgresql+psycopg2://apira:apira@host.docker.internal:5432/apira
 # GOOGLE_API_KEY=<gemini-key>   # needed for searchVectorDB / ingest
+# Recreate after changing the key: docker compose up -d --force-recreate rag-server
 docker compose up -d --build
 ```
 

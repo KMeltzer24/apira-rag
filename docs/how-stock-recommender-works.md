@@ -13,7 +13,7 @@ The Recommender tab lets you pick **local folder** or **vector DB** search via a
 |------|----------------------|
 | **apira-rag** (this repo) | Research tools, RAG pipeline, and `stock-research/` corpus |
 | [apira-mcp](https://github.com/KMeltzer24/apira-mcp) | `login` and `get_portfolio` tools |
-| [apira-agent](https://github.com/KMeltzer24/apira-agent) | LangGraph supervisor + portfolio/research specialists |
+| [apira-agent](https://github.com/KMeltzer24/apira-agent) | Supervisor (`:8100`) discovers portfolio (`:8110`) and research (`:8120`) over A2A |
 | [apira-frontend](https://github.com/KMeltzer24/apira-frontend) | Recommender tab — sends one `POST /chat` prompt |
 | [apira](https://github.com/KMeltzer24/apira) | Backend APIs (`login`, `get_portfolio`) via MCP |
 
@@ -23,7 +23,7 @@ The Recommender tab lets you pick **local folder** or **vector DB** search via a
 
 ## The big picture
 
-Research files live in `stock-research/` in this repo, mounted into the apira-rag container. When a user clicks **Get Recommendations**, the frontend sends a structured prompt to the agent. The **supervisor** routes to the **portfolio** specialist (`login`, `get_portfolio`) then the **research** specialist (`searchLocalFolder` or `searchVectorDB`), then finishes with natural-language recommendations.
+Research files live in `stock-research/` in this repo, mounted into the apira-rag container. When a user clicks **Get Recommendations**, the frontend sends a structured prompt to the **supervisor**. That process discovers the **portfolio** and **research** containers (Nacos / A2A), calls them in order (`login`, `get_portfolio`, then `searchLocalFolder` or `searchVectorDB`), then returns Hold/Add/Trim text.
 
 ```
 User (Recommender tab)
@@ -32,14 +32,15 @@ User (Recommender tab)
 apira-frontend (:3000 on Mac)
   │  POST /chat { message: "Log in as alice… searchLocalFolder…" }
   ▼
-apira-agent (:8100)
-  │  supervisor → portfolio → research
+apira-agent supervisor (:8100)
+  │  discovers specialists via Nacos, then A2A calls
+  │  supervisor → portfolio → logged_in → research
   │
-  ├── apira-mcp (:8000)
+  ├── portfolio container (:8110) → apira-mcp (:8000)
   ├── login          → user-service (:8001) → Postgres
   ├── get_portfolio  → portfolio-service (:8002) → Postgres
   │
-  └── apira-rag (:8200)
+  └── research container (:8120) → apira-rag (:8200)
       ├── searchLocalFolder → stock-research/
       └── searchVectorDB    → research_chunks in Postgres
   ▼
@@ -59,7 +60,7 @@ The frontend never calls MCP or reads files directly. It only talks to the agent
 | Research files | `stock-research/` in this repo | Analyst notes, PDFs, and extracted text |
 | RAG mount | `/data/stock-research` inside container | Docker volume |
 | `searchLocalFolder` | `server.py` in this repo | Scans `.txt` and `.md` only |
-| Specialist prompts | `graph.py` in apira-agent | Supervisor routes; research specialist picks one search tool |
+| Specialist prompts | `agents/graph.py` in apira-agent | Supervisor A2A-calls specialists; research picks one search tool |
 | UI trigger | `StockRecommenderScreen` in apira-frontend | Username + password → preset prompt |
 
 ---
@@ -70,7 +71,7 @@ When the user opens the **Recommender** tab, enters `alice` / `password`, and cl
 
 1. **Frontend** builds a fixed prompt (see below) and sends `POST http://localhost:8100/chat`.
 
-2. **Agent** receives the message. On the first request it connects to both MCP servers, partitions tools onto specialists (`login` / `get_portfolio` vs the two search tools), and compiles the supervisor graph.
+2. **Supervisor** receives the message. It discovers the portfolio and research Agent Cards, then compiles the LangGraph that **calls** those containers. Each specialist connects to its own MCP server (`login` / `get_portfolio` vs the two search tools).
 
 3. **Supervisor** routes. Typical order:
    - **portfolio** specialist: `login("alice", "password")` → `{ user_id: 1, … }`, then `get_portfolio(1)` → holdings
@@ -280,7 +281,7 @@ That single string is the entire contract between frontend and agent.
 
 ## Agent prompts
 
-Standing instructions live in [apira-agent/graph.py](https://github.com/KMeltzer24/apira-agent/blob/main/graph.py):
+Standing instructions live in [apira-agent/agents/graph.py](https://github.com/KMeltzer24/apira-agent/blob/main/agents/graph.py) and each specialist package:
 
 - **Supervisor** — route to `portfolio`, `research`, or finish (chat with no tools)
 - **Portfolio specialist** — log in before `get_portfolio`
@@ -298,10 +299,10 @@ Research files and the tool ship with **this repo**. After changes:
 cd ~/apira-rag && docker compose up -d --build
 ```
 
-Then **restart the agent** so it reloads tools from MCP:
+Then **restart the research (and supervisor) containers** so they pick up the new MCP session:
 
 ```bash
-cd ~/apira-agent && docker compose restart
+cd ~/apira-agent && docker compose restart supervisor research
 ```
 
 Frontend changes (Recommender tab) rebuild locally:
@@ -441,7 +442,7 @@ Use the pgvector image from [apira run-locally.md](https://github.com/KMeltzer24
 
 | Problem | Likely cause | Fix |
 |---------|--------------|-----|
-| Agent ignores research files | Agent not restarted after RAG rebuild | `docker compose restart` in `~/apira-agent/` |
+| Agent ignores research files | Research container not restarted after RAG rebuild | `docker compose restart supervisor research` in `~/apira-agent/` |
 | `searchLocalFolder` returns empty | `stock-research/` not mounted | Check `docker-compose.yml` volume; rebuild RAG |
 | Generic advice, no file citations | Gemini skipped tool calls | Retry; check agent logs |
 | "Stock research folder not found" | Volume missing | Ensure `stock-research/` is in the image/volume |
@@ -462,5 +463,5 @@ Use the pgvector image from [apira run-locally.md](https://github.com/KMeltzer24
 | [vector-search-params.md](vector-search-params.md) | `similarity`, `limit`, prefer-newer ranking |
 | [stock-research/pdfs/README.md](../stock-research/pdfs/README.md) | Ticker PDF sources, ingest commands, Google PDF search |
 | [apira: architecture.md](https://github.com/KMeltzer24/apira/blob/main/docs/architecture.md) | Full system diagram |
-| [apira-agent: how-the-agent-works.md](https://github.com/KMeltzer24/apira-agent/blob/main/docs/how-the-agent-works.md) | Supervisor + specialist graph |
+| [apira-agent: how-the-agent-works.md](https://github.com/KMeltzer24/apira-agent/blob/main/docs/how-the-agent-works.md) | Three A2A containers + LangGraph routing |
 | [apira-frontend: how-the-frontend-works.md](https://github.com/KMeltzer24/apira-frontend/blob/main/docs/how-the-frontend-works.md) | Three UI tabs |
