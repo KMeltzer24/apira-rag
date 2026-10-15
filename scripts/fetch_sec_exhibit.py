@@ -12,7 +12,7 @@ from pathlib import Path
 
 from rag.config import STOCK_RESEARCH_DIR
 
-SEC_USER_AGENT = "ApiraDemoBot/1.0 (learning project; contact: local-dev)"
+SEC_USER_AGENT = "ApiraResearchBot/1.0 (https://github.com/KMeltzer24/apira-rag)"
 
 
 def _strip_html(raw: str) -> str:

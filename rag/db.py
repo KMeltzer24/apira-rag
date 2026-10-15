@@ -10,7 +10,7 @@ def require_database_url() -> str:
     if not DATABASE_URL:
         raise RuntimeError(
             "DATABASE_URL is not set. Point it at the same local PostgreSQL "
-            "as the backend services (see apira docs/run-locally.md)."
+            "as the backend services (see the apira README)."
         )
     return DATABASE_URL
 

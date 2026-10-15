@@ -1,4 +1,4 @@
-"""MCP server for Apira stock-research tools."""
+"""MCP server for Apira tools: login, holdings, and stock research."""
 
 from __future__ import annotations
 
@@ -10,6 +10,7 @@ from pathlib import Path
 from fastmcp import FastMCP
 
 from apira_logging import get_logger, log_event
+from backend_tools import register_backend_tools
 from rag.search import search_vector_db
 from request_logging import RequestIdHeaderMiddleware, RequestLoggingMiddleware
 
@@ -19,8 +20,9 @@ MAX_FILE_BYTES = 32_000
 MAX_TOTAL_BYTES = 96_000
 
 logger = get_logger("apira-rag")
-mcp = FastMCP("apira-rag")
+mcp = FastMCP("apira")
 mcp.add_middleware(RequestLoggingMiddleware())
+register_backend_tools(mcp)
 
 
 def _resolve_research_dir() -> Path:
@@ -99,7 +101,6 @@ async def searchLocalFolder(query: str = "") -> dict:
 @mcp.tool()
 async def searchVectorDB(query: str, limit: int = 5) -> dict:
     """Semantically search ingested stock research in PostgreSQL/pgvector."""
-    # Lifecycle detail lives in rag.db_search.*; avoid a duplicate INFO line here.
     return await asyncio.to_thread(search_vector_db, query, limit)
 
 
@@ -109,7 +110,7 @@ if __name__ == "__main__":
     mcp.run(
         transport="streamable-http",
         host="0.0.0.0",
-        port=8200,
+        port=int(os.environ.get("MCP_PORT", "8000")),
         path="/mcp",
         middleware=[ASGIMiddleware(RequestIdHeaderMiddleware)],
     )

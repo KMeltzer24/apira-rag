@@ -2,7 +2,7 @@ services:
   rag-server:
     build: .
     ports:
-      - "8200:8200"
+      - "8000:8000"
     environment:
       - STOCK_RESEARCH_DIR=/data/stock-research
       - DATABASE_URL=${DATABASE_URL}
@@ -10,10 +10,15 @@ services:
       - EMBEDDING_MODEL=${EMBEDDING_MODEL:-gemini-embedding-001}
       - EMBEDDING_DIMENSION=${EMBEDDING_DIMENSION:-768}
       - EMBED_DELAY_SECONDS=${EMBED_DELAY_SECONDS:-0.7}
+      - USER_SERVICE_URL=${USER_SERVICE_URL:-http://host.docker.internal:8001}
+      - PORTFOLIO_SERVICE_URL=${PORTFOLIO_SERVICE_URL:-http://host.docker.internal:8002}
+      - MCP_PORT=8000
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
       - LOG_FORMAT=${LOG_FORMAT:-json}
       - ENVIRONMENT=${ENVIRONMENT:-development}
       - PYTHONPATH=/app
     volumes:
       - ./stock-research:/data/stock-research
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     restart: unless-stopped

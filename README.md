@@ -1,117 +1,45 @@
-# Apira RAG
+# Apira RAG (MCP tools)
 
-Research ingestion and retrieval service for the Apira stock recommender.
+[![Python](https://img.shields.io/badge/Python-3.11-3776AB?logo=python&logoColor=white)](https://www.python.org/)
+[![MCP](https://img.shields.io/badge/MCP-FastMCP-black)](https://github.com/modelcontextprotocol)
+[![pgvector](https://img.shields.io/badge/pgvector-HNSW-4169E1)](https://github.com/pgvector/pgvector)
+[![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
-It owns:
+**MCP + RAG server** for Apira. One **FastMCP** endpoint at **`http://localhost:8000/mcp`**: backend tools (login, holdings, last rec) plus research — keyword search on disk and **semantic search** (Gemini embeddings, pgvector HNSW).
 
-- `searchLocalFolder` — keyword search over research files (`stock-research/`)
-- `searchVectorDB` — semantic search over pgvector
-- PDF and SEC extraction
-- Chunking and Gemini embeddings
-- The `stock-research/` corpus
-- Ingest, purge, and rebuild scripts
+Apira is four repos. **Clone + run order:** [apira README](https://github.com/KMeltzer24/apira). Start the backend before this repo.
 
-The service exposes MCP over Streamable HTTP at `http://localhost:8200/mcp`. The [apira-agent](https://github.com/KMeltzer24/apira-agent) **research** container calls these tools; login/portfolio tools stay on `apira-mcp` (the **portfolio** container).
+## Tools
 
-## Architecture
+| Tool | Backs onto |
+|------|------------|
+| `login` | [apira](https://github.com/KMeltzer24/apira) `POST /login` |
+| `get_portfolio` | `GET /portfolio` |
+| `getPreviousRecommendation` / `saveRecommendation` | `GET` / `PUT /recommendation` |
+| `searchLocalFolder` | `stock-research/` on disk |
+| `searchVectorDB` | Postgres `research_chunks` (Gemini embeddings, HNSW) |
 
-```text
-apira-agent supervisor :8100
-├── A2A portfolio :8110 → apira-mcp :8000 → login, get_portfolio
-└── A2A research :8120 → apira-rag :8200 → searchLocalFolder, searchVectorDB
-                         ├── stock-research/
-                         ├── Gemini embeddings
-                         └── Postgres research_chunks (pgvector)
-```
+[apira-agent](https://github.com/KMeltzer24/apira-agent) specialists load **allowlists**, not the full catalog. The [frontend](https://github.com/KMeltzer24/apira-frontend) does not call this server.
 
-The vector table lives in the **same local PostgreSQL** as the backend (`docker-compose.local.yml` in apira). See [apira run-locally.md](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md).
+Local-folder search does not need a Gemini key. Vector search and ingest do.
 
-## Chunking, metadata, and search ranking
+Research files live in `stock-research/` (analyst notes, PDFs, extracted text). They are committed; nothing is downloaded on start. Optional ingest embeds that corpus into Postgres.
 
-Ingest splits each research file into overlapping chunks (~800 chars). The
-chunker prefers markdown / Source headings, then paragraphs and sentences
-(not a blind fixed-window split).
+## Run
 
-Each `research_chunks` row stores:
-
-| Column | Purpose |
-|--------|---------|
-| `content` + embedding | Semantic search |
-| `ticker` | From filename / headers when detectable |
-| `document_date` | From FY/Q patterns in the filename when present |
-| `section_title` | Heading at the start of the chunk when present |
-| `content_hash` | Skip unchanged files in `ingest_changed` |
-
-`searchVectorDB` ranks by similarity, then **prefers newer `document_date`
-values for the same ticker** so older overlapping chunks lose to newer ones.
-
-Vector search is backed by an **HNSW** approximate-nearest-neighbor index on the
-`embedding` column (`vector_cosine_ops`, `m=16`, `ef_construction=64`), applied
-idempotently by `rag/schema.py` and mirrored in `sql/migrate_research_chunks_hnsw.sql`.
-No re-embedding is needed to add it. At a small corpus size PostgreSQL may still
-choose a sequential scan, which is expected.
-
-- Full rebuild (re-embed everything): `scripts/ingest_research.py`
-- New/changed files only: `scripts/ingest_changed.py`
-
-Details: [docs/how-stock-recommender-works.md](docs/how-stock-recommender-works.md).  
-Vector params (`similarity`, `limit`, prefer-newer): [docs/vector-search-params.md](docs/vector-search-params.md).
-
-## Local setup
+Need [Docker Desktop](https://www.docker.com/products/docker-desktop/). Point `DATABASE_URL` at the same Postgres this stack starts in [apira](https://github.com/KMeltzer24/apira).
 
 ```bash
+git clone https://github.com/KMeltzer24/apira-rag.git
+cd apira-rag
 cp .env.example .env
-# DATABASE_URL=postgresql+psycopg2://apira:apira@host.docker.internal:5432/apira
-# GOOGLE_API_KEY=<gemini-key>   # needed for searchVectorDB / ingest
-# Recreate after changing the key: docker compose up -d --force-recreate rag-server
+# DATABASE_URL, USER_SERVICE_URL, PORTFOLIO_SERVICE_URL
+# GOOGLE_API_KEY only for searchVectorDB / ingest
 docker compose up -d --build
 ```
 
-Run tests:
-
-```bash
-PYTHONPATH=. python -m unittest discover -s tests -v
-```
-
-Ingest the committed corpus (full rebuild — re-embeds every file):
+Optional ingest (vector DB):
 
 ```bash
 docker compose run --rm rag-server python scripts/ingest_research.py
 ```
-
-Ingest only **new or changed** files (recommended when adding a PDF):
-
-```bash
-docker compose run --rm rag-server python scripts/ingest_changed.py
-```
-
-Re-extract PDFs and refresh the vector index:
-
-```bash
-docker compose run --rm rag-server bash scripts/rebuild_vector_corpus.sh
-```
-
-For demos, **Local folder** search works without ingest. Vector DB needs the ingest step above.
-
-## Logging and correlation
-
-The RAG service emits structured JSON logs to stdout for MCP tool calls, local
-and vector searches, database operations, embedding retries, PDF extraction,
-and ingestion. It accepts or generates `X-Request-ID` and returns it to the
-caller. Logs include counts, filenames, model names, statuses, and durations;
-they omit query text, document contents, vectors, credentials, and tool argument
-values.
-
-```bash
-docker compose logs -f rag-server
-docker compose logs --since=10m rag-server | grep '<request-id>'
-```
-
-See the shared [logging contract](https://github.com/KMeltzer24/apira/blob/main/docs/logging.md)
-and [how logging works](https://github.com/KMeltzer24/apira/blob/main/docs/how-logging-works.md).
-
-## Documentation
-
-- [How the stock recommender works](docs/how-stock-recommender-works.md)
-- [Vector search parameters (similarity, limit, prefer-newer, HNSW)](docs/vector-search-params.md)
-- [Run the full stack locally](https://github.com/KMeltzer24/apira/blob/main/docs/run-locally.md)
