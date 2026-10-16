@@ -5,7 +5,7 @@
 [![pgvector](https://img.shields.io/badge/pgvector-HNSW-4169E1)](https://github.com/pgvector/pgvector)
 [![Docker](https://img.shields.io/badge/Docker-Compose-2496ED?logo=docker&logoColor=white)](https://docs.docker.com/compose/)
 
-**MCP + RAG server** for Apira. One **FastMCP** endpoint at **`http://localhost:8000/mcp`**: backend tools (login, holdings, last rec) plus research — keyword search on disk and **semantic search** (Gemini embeddings, pgvector HNSW).
+**MCP + RAG server** for **Apira** (AI Portfolio Intelligence Research Assistant). One **FastMCP** endpoint at **`http://localhost:8000/mcp`**: backend tools (login, holdings, last rec) plus research — keyword search on disk and **semantic search** (Gemini embeddings, pgvector HNSW).
 
 Apira is four repos. **Clone + run order:** [apira README](https://github.com/KMeltzer24/apira). Start the backend before this repo.
 
